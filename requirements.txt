@@ -1,0 +1,4 @@
+# Dependências Python para os scripts de conversão
+pypandoc>=1.13
+pandas>=2.2.0
+openpyxl>=3.1.0
