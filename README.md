@@ -287,8 +287,6 @@ Walks the entire artifact directory and masks sensitive data patterns using rege
 | `CHAVE_PRIVADA_PEM` | PEM private keys |
 | `SEGREDO_INFRA` | password, secret, dockerconfigjson, etc. |
 | `IBAN` / `SWIFT_BIC` | International banking identifiers |
-| `LOGIN_CORPORATIVO` | Corporate logins starting with `tbn` |
-| `UUID` | UUID-format secrets |
 
 Matches are replaced with `[<TYPE>_REMOVIDO]`.
 

@@ -287,8 +287,7 @@ Percorre o diretório de artefatos e mascara padrões de dados sensíveis usando
 | `CHAVE_PRIVADA_PEM` | Chaves privadas PEM |
 | `SEGREDO_INFRA` | password, secret, dockerconfigjson etc. |
 | `IBAN` / `SWIFT_BIC` | Identificadores bancários internacionais |
-| `LOGIN_CORPORATIVO` | Logins corporativos iniciados com `tbn` |
-| `UUID` | Secrets no formato UUID |
+
 
 As ocorrências são substituídas por `[<TIPO>_REMOVIDO]`.
 
