@@ -1,3 +1,5 @@
 curl -k -X POST 'https://harvester-shiftwise-ai.apps-crc.testing/collect' \
   -H 'Content-Type: application/json' \
   -d '{"namespaces":"shiftwise-ai openshift-monitoring default"}'
+
+oc logs -f -n shiftwise-ai statefulset/kubeoptix-harvester | stdbuf -oL awk '{gsub(/\r/,""); printf "\r%-220s",$0; fflush()} END{print ""}'

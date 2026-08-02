@@ -29,6 +29,4 @@ spec:
     to:
       kind: ImageStreamTag
       name: {{ printf "%s:%s" .Values.build.imageStreamName .Values.build.outputTag | quote }}
-  triggers:
-    - type: ConfigChange
 {{- end }}

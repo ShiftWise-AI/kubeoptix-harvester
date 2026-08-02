@@ -1,3 +1,4 @@
+{{- if .Values.deploy.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -7,7 +8,8 @@ metadata:
     {{- include "kubeoptix-harvester.labels" . | nindent 4 }}
 spec:
   serviceName: {{ .Values.service.headless.name }}
-  replicas: {{ .Values.replicaCount }}
+  # This workload is intentionally single-instance.
+  replicas: 1
   selector:
     matchLabels:
       {{- include "kubeoptix-harvester.selectorLabels" . | nindent 6 }}
@@ -52,3 +54,4 @@ spec:
           persistentVolumeClaim:
             claimName: {{ default .Values.persistence.name .Values.persistence.existingClaim }}
       {{- end }}
+{{- end }}

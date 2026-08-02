@@ -1,5 +1,8 @@
 replicaCount: 1
 
+deploy:
+  enabled: true
+
 namespace:
   create: true
   name: shiftwise-ai
@@ -21,7 +24,7 @@ build:
     gitRef: feature/ocp
     contextDir: ""
   sourceSecret:
-    create: false
+    create: true
     name: ""
     username: ""
     token: ""

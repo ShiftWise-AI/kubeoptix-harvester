@@ -10,6 +10,8 @@
 - [Prerequisites](#prerequisites)
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
+- [OpenShift Helm Installation](#openshift-helm-installation)
+- [Git Token for Private Clone](#git-token-for-private-clone)
 - [Extraction & Processing Flow](#extraction--processing-flow)
 - [Scripts Reference](#scripts-reference)
   - [run.sh](#runsh)
@@ -82,6 +84,75 @@ The script will:
 4. Collect namespace resources and pod logs
 5. Remove `Secret` manifests (dry-run mode — safe by default)
 6. Anonymize all collected artifacts in-place
+
+---
+
+## OpenShift Helm Installation
+
+Use `install.sh` to run a clean Helm-based installation on OpenShift.
+
+```bash
+# Required: pass the values file as argument
+./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+
+# Equivalent positional form
+./install.sh ./helm/kubeoptix-harvester/values.yaml
+```
+
+What `install.sh` does:
+1. Validates required CLIs (`helm`, `oc`) and active cluster session
+2. Optionally removes previous release/namespace when `RESET=true`
+3. Ensures the target namespace exists
+4. Installs/upgrades Helm chart from `./helm/kubeoptix-harvester`
+5. Triggers exactly one OpenShift build (`oc start-build`)
+6. Performs route health check on `/health`
+
+Useful environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `RELEASE` | `kubeoptix-harvester` | Helm release name |
+| `NS` | `shiftwise-ai` | Target namespace |
+| `RESET` | `true` | Remove previous release and namespace before install |
+| `WAIT_BUILD` | `true` | Follow build logs until build completes |
+| `GIT_URI` | `https://github.com/ShiftWise-AI/kubeoptix-harvester.git` | Source repository URL for BuildConfig |
+| `GIT_REF` | `feature/ocp` | Git branch/tag used by BuildConfig |
+
+Examples:
+
+```bash
+# Do not delete namespace/release before reinstall
+RESET=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+
+# Start build without waiting in foreground
+WAIT_BUILD=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+```
+
+---
+
+## Git Token for Private Clone
+
+Because the source repository is private, OpenShift BuildConfig must authenticate to clone it.
+
+Set this in your Helm values file (`build.sourceSecret`):
+
+```yaml
+build:
+  sourceSecret:
+    create: true
+    name: github-auth
+    username: x-access-token
+    token: <YOUR_GITHUB_PAT>
+```
+
+Required token permissions (Fine-grained PAT):
+1. Repository access: only `ShiftWise-AI/kubeoptix-harvester`
+2. Repository permissions: `Contents: Read-only`
+3. If organization SSO/SAML is enabled, authorize the token for the organization
+
+Notes:
+1. Helm/OpenShift only needs clone (read) access; no write access is required.
+2. Keep `values.yaml` out of version control and rotate tokens if exposed.
 
 ---
 

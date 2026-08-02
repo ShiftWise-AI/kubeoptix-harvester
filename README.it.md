@@ -10,6 +10,8 @@
 - [Prerequisiti](#prerequisiti)
 - [Struttura del Progetto](#struttura-del-progetto)
 - [Avvio Rapido](#avvio-rapido)
+- [Installazione Helm su OpenShift](#installazione-helm-su-openshift)
+- [Token Git per Clone Privato](#token-git-per-clone-privato)
 - [Flusso di Estrazione e Trattamento](#flusso-di-estrazione-e-trattamento)
 - [Riferimento agli Script](#riferimento-agli-script)
   - [run.sh](#runsh)
@@ -82,6 +84,75 @@ Lo script si occuperà di:
 4. Raccogliere le risorse e i log dei pod per namespace
 5. Rimuovere i manifest `Secret` (modalità dry-run predefinita — sicura)
 6. Anonimizzare tutti gli artefatti raccolti
+
+---
+
+## Installazione Helm su OpenShift
+
+Usa `install.sh` per eseguire un'installazione pulita tramite Helm su OpenShift.
+
+```bash
+# Obbligatorio: passare il file values come argomento
+./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+
+# Forma posizionale equivalente
+./install.sh ./helm/kubeoptix-harvester/values.yaml
+```
+
+Cosa fa `install.sh`:
+1. Verifica le CLI richieste (`helm`, `oc`) e la sessione cluster attiva
+2. Opzionalmente rimuove release/namespace precedenti quando `RESET=true`
+3. Garantisce che il namespace target esista
+4. Installa/aggiorna il chart Helm da `./helm/kubeoptix-harvester`
+5. Avvia esattamente una build OpenShift (`oc start-build`)
+6. Esegue health check della route su `/health`
+
+Variabili ambiente utili:
+
+| Variabile | Default | Descrizione |
+|---|---|---|
+| `RELEASE` | `kubeoptix-harvester` | Nome release Helm |
+| `NS` | `shiftwise-ai` | Namespace di destinazione |
+| `RESET` | `true` | Rimuove release e namespace prima dell'installazione |
+| `WAIT_BUILD` | `true` | Segue i log build fino al completamento |
+| `GIT_URI` | `https://github.com/ShiftWise-AI/kubeoptix-harvester.git` | URL sorgente usato dal BuildConfig |
+| `GIT_REF` | `feature/ocp` | Branch/tag usato dal BuildConfig |
+
+Esempi:
+
+```bash
+# Non cancellare namespace/release prima della reinstallazione
+RESET=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+
+# Avviare build senza attendere in foreground
+WAIT_BUILD=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+```
+
+---
+
+## Token Git per Clone Privato
+
+Poiché il repository sorgente è privato, il BuildConfig OpenShift deve autenticarsi per eseguire il clone.
+
+Imposta nel file values (`build.sourceSecret`):
+
+```yaml
+build:
+  sourceSecret:
+    create: true
+    name: github-auth
+    username: x-access-token
+    token: <IL_TUO_GITHUB_PAT>
+```
+
+Permessi minimi del token (Fine-grained PAT):
+1. Accesso solo al repository `ShiftWise-AI/kubeoptix-harvester`
+2. Permesso repository `Contents: Read-only`
+3. Se l'organizzazione usa SSO/SAML, autorizzare il token per l'organizzazione
+
+Note:
+1. Helm/OpenShift richiede solo accesso in lettura (clone), non scrittura.
+2. Mantieni `values.yaml` fuori dal versionamento e ruota token esposti.
 
 ---
 

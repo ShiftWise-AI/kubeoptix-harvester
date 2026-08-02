@@ -1,4 +1,4 @@
-{{- if .Values.service.headless.enabled }}
+{{- if and .Values.deploy.enabled .Values.service.headless.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
