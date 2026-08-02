@@ -60,22 +60,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$OUTPUT_DIR" ]]; then
-  OUTPUT_DIR="$ROOT_DIR/oc-health-artifacts-$(date '+%Y%m%d_%H%M%S')"
+  OUTPUT_DIR="/app/data/oc-health-artifacts-$(date '+%Y%m%d_%H%M%S')"
 fi
 mkdir -p "$OUTPUT_DIR"
 ARTIFACTS_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 
-if [[ ! -d "$VENV_DIR" ]]; then
-  echo "[INFO] Creating Python virtual environment..."
-  python3 -m venv "$VENV_DIR"
-fi
-
-# shellcheck disable=SC1091
-source "$VENV_DIR/bin/activate"
-
-echo "[INFO] Installing Python dependencies..."
-pip install --upgrade pip >/dev/null
-pip install -r "$REQUIREMENTS_FILE"
+#if [[ ! -d "$VENV_DIR" ]]; then
+#  echo "[INFO] Creating Python virtual environment..."
+#  python3 -m venv "$VENV_DIR"
+#fi
+#
+## shellcheck disable=SC1091
+#source "$VENV_DIR/bin/activate"
+#
+#echo "[INFO] Installing Python dependencies..."
+#pip install --upgrade pip >/dev/null
+#pip install -r "$REQUIREMENTS_FILE"
 
 [[ -f "$COLLECT_SCRIPT" ]] || fail "Collection script not found: $COLLECT_SCRIPT"
 collect_args=(-o "$ARTIFACTS_DIR" --tail-lines "$TAIL_LINES")

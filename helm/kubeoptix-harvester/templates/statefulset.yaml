@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "kubeoptix-harvester.fullname" . }}
+  namespace: {{ include "kubeoptix-harvester.namespace" . }}
+  labels:
+    {{- include "kubeoptix-harvester.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Values.service.headless.name }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kubeoptix-harvester.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubeoptix-harvester.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "kubeoptix-harvester.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      containers:
+        - name: kubeoptix-harvester
+          image: "{{ include "kubeoptix-harvester.image" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.startup.loginWithServiceAccount }}
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+{{ .Values.startup.script | indent 14 }}
+          {{- end }}
+          env:
+            - name: HOME
+              value: {{ .Values.podEnv.HOME | quote }}
+            - name: KUBECONFIG
+              value: {{ .Values.podEnv.KUBECONFIG | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.api.targetPort }}
+              protocol: TCP
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: app-data
+              mountPath: {{ .Values.persistence.mountPath }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: {{ default .Values.persistence.name .Values.persistence.existingClaim }}
+      {{- end }}

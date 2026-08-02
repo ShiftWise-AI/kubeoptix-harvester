@@ -26,7 +26,7 @@ COLLECT_SCRIPT="$SCRIPT_DIR/oc_collect_namespace.sh"
 
 OUTPUT_DIR="./oc-health-artifacts-$(date '+%Y%m%d_%H%M%S')"
 TAIL_LINES="300"
-NAMESPACES="san1-prd san2-prd"
+NAMESPACES="default "
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

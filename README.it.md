@@ -258,7 +258,7 @@ oc-health-artifacts-20260801_120000/
 
 | Variabile | Default | Descrizione |
 |---|---|---|
-| `NAMESPACES` | `san1-prd san2-prd` | Namespace raccolti quando `--namespaces` è omesso |
+| `NAMESPACES` | `default ` | Namespace raccolti quando `--namespaces` è omesso |
 | `TAIL_LINES` | `300` | Righe di log per pod |
 | `OUTPUT_DIR` | `./oc-health-artifacts-<ts>` | Directory radice degli artefatti |
 | `VENV_DIR` | `./.venv` | Percorso dell'ambiente virtuale Python |

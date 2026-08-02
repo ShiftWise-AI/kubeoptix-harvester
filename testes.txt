@@ -1,0 +1,3 @@
+curl -k -X POST 'https://harvester-shiftwise-ai.apps-crc.testing/collect' \
+  -H 'Content-Type: application/json' \
+  -d '{"namespaces":"shiftwise-ai openshift-monitoring default"}'
