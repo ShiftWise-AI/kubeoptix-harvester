@@ -30,14 +30,21 @@ REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
 #VENV_DIR="$SCRIPT_DIR/.venv"
 
 OUTPUT_DIR=""
+REQUESTED_OUTPUT_DIR=""
 NAMESPACES=""
 TAIL_LINES="300"
+FIXED_OUTPUT_DIR="/app/data/assessment"
+
+normalize_output_dir() {
+  printf '%s' "$FIXED_OUTPUT_DIR"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--output-dir)
       OUTPUT_DIR="${2:-}"
       [[ -n "$OUTPUT_DIR" ]] || fail "$1 requires a directory"
+      REQUESTED_OUTPUT_DIR="$OUTPUT_DIR"
       shift 2
       ;;
     --namespaces)
@@ -60,10 +67,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$OUTPUT_DIR" ]]; then
-  OUTPUT_DIR="/app/data/oc-health-artifacts-$(date '+%Y%m%d_%H%M%S')"
+  OUTPUT_DIR="$FIXED_OUTPUT_DIR"
 fi
+OUTPUT_DIR="$(normalize_output_dir "$OUTPUT_DIR")"
 mkdir -p "$OUTPUT_DIR"
 ARTIFACTS_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
+
+if [[ -n "$REQUESTED_OUTPUT_DIR" && "$REQUESTED_OUTPUT_DIR" != "$FIXED_OUTPUT_DIR" ]]; then
+  echo "[WARN] Ignoring custom output directory and using fixed path: $FIXED_OUTPUT_DIR"
+fi
+
+# Remove only legacy artifact roots that should no longer be generated.
+find "/app/data" -mindepth 1 -maxdepth 1 -type d -name 'oc-health-artifacts-*' -exec rm -rf {} +
 
 #if [[ ! -d "$VENV_DIR" ]]; then
 #  echo "[INFO] Creating Python virtual environment..."
@@ -99,5 +114,5 @@ echo "[INFO] Step 4/4: anonymizing collected artifacts..."
 python3 "$ANONYMIZATION_SCRIPT" "$ARTIFACTS_DIR"
 
 printf '\n'
-echo "[INFO] Extraction completed."
-echo "[INFO] Artifacts: $ARTIFACTS_DIR"
+echo "[INFO] Collection finished successfully."
+echo "[INFO] Final artifacts directory: $ARTIFACTS_DIR"

@@ -14,6 +14,7 @@ GIT_URI="${GIT_URI:-https://github.com/ShiftWise-AI/kubeoptix-harvester.git}"
 GIT_REF="${GIT_REF:-feature/ocp}"
 RESET="${RESET:-true}"
 WAIT_BUILD="${WAIT_BUILD:-true}"
+BUILD_FROM_LOCAL="${BUILD_FROM_LOCAL:-true}"
 
 usage() {
   echo "Usage: $0 -f <values-file>"
@@ -110,10 +111,20 @@ if [[ -z "$BC_NAME" ]]; then
   exit 1
 fi
 
-if [[ "$WAIT_BUILD" == "true" ]]; then
-  oc start-build "$BC_NAME" -n "$NS" --follow --wait
+if [[ "$BUILD_FROM_LOCAL" == "true" ]]; then
+  echo "[INFO] Build source mode: local workspace (binary build)"
+  if [[ "$WAIT_BUILD" == "true" ]]; then
+    oc start-build "$BC_NAME" -n "$NS" --from-dir=. --follow --wait
+  else
+    oc start-build "$BC_NAME" -n "$NS" --from-dir=. --wait
+  fi
 else
-  oc start-build "$BC_NAME" -n "$NS" --wait
+  echo "[INFO] Build source mode: remote Git source"
+  if [[ "$WAIT_BUILD" == "true" ]]; then
+    oc start-build "$BC_NAME" -n "$NS" --follow --wait
+  else
+    oc start-build "$BC_NAME" -n "$NS" --wait
+  fi
 fi
 
 echo "[INFO] Phase 2/2: Deploying StatefulSet and runtime objects after successful build..."

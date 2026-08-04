@@ -115,8 +115,9 @@ Variáveis de ambiente úteis:
 | `NS` | `shiftwise-ai` | Namespace de destino |
 | `RESET` | `true` | Remove release e namespace antes de instalar |
 | `WAIT_BUILD` | `true` | Acompanha o build até finalizar |
-| `GIT_URI` | `https://github.com/ShiftWise-AI/kubeoptix-harvester.git` | URL de origem usada pelo BuildConfig |
-| `GIT_REF` | `feature/ocp` | Branch/tag usada pelo BuildConfig |
+| `BUILD_FROM_LOCAL` | `true` | Usa `oc start-build --from-dir=.` para publicar a imagem com as alterações locais |
+| `GIT_URI` | `https://github.com/ShiftWise-AI/kubeoptix-harvester.git` | URL de origem usada somente quando `BUILD_FROM_LOCAL=false` |
+| `GIT_REF` | `feature/ocp` | Branch/tag usada somente quando `BUILD_FROM_LOCAL=false` |
 
 Exemplos:
 
@@ -126,6 +127,9 @@ RESET=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
 
 # Disparar build sem acompanhar em foreground
 WAIT_BUILD=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+
+# Forçar build a partir do Git remoto em vez do workspace local
+BUILD_FROM_LOCAL=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
 ```
 
 ---
@@ -226,9 +230,11 @@ Uso:
 
 Opções:
   --namespaces   Lista de namespaces separados por espaço (obrigatório)
-  -o             Diretório de saída (padrão: ./oc-health-artifacts-<timestamp>)
+  -o             Diretório de saída (fixo em /app/data/assessment)
   --tail-lines   Número de linhas de log por pod (padrão: 300)
 ```
+
+Observação: o coletor força o diretório raiz em `/app/data/assessment`. Qualquer valor customizado de `-o` é ignorado.
 
 ---
 
@@ -252,9 +258,9 @@ Script de coleta principal. Executa três passos ordenados por namespace:
 
 | Passo | O que é coletado | Caminho de saída |
 |---|---|---|
-| 1/3 | Recursos adicionais do namespace (300+ tipos de CRD) | `<ns>/resources/<kind>/<name>.yaml` |
-| 2/3 | Manifests principais (Deployment, Service, Route etc.) | `<ns>/apps/<app>/<kind>/<name>.yaml` |
-| 3/3 | Logs de pods (agrupados pelo label `app`) | `<ns>/apps/<app>/pod-logs/<pod>.log` |
+| 1/3 | Recursos adicionais do namespace (300+ tipos de CRD) | `<output_dir>/<namespace>/resources/<kind>/<name>.yaml` |
+| 2/3 | Manifests principais (Deployment, Service, Route etc.) | `<output_dir>/<namespace>/apps/<app>/<kind>/<name>.yaml` |
+| 3/3 | Logs de pods (agrupados pelo label `app`) | `<output_dir>/<namespace>/apps/<app>/pod-logs/<pod>.log` |
 
 Recursos sem label `app` são armazenados em `__no_app__`.
 
@@ -303,7 +309,7 @@ Uso:
 Após uma execução completa, o diretório de artefatos terá a seguinte estrutura:
 
 ```
-oc-health-artifacts-20260801_120000/
+/app/data/assessment/
 ├── worknodes/
 │   ├── worker-node-01.yaml
 │   └── worker-node-02.yaml
@@ -330,8 +336,10 @@ oc-health-artifacts-20260801_120000/
 |---|---|---|
 | `NAMESPACES` | `default ` | Namespaces coletados quando `--namespaces` é omitido |
 | `TAIL_LINES` | `300` | Linhas de log por pod |
-| `OUTPUT_DIR` | `./oc-health-artifacts-<ts>` | Diretório raiz dos artefatos |
+| `OUTPUT_DIR` | `/app/data/assessment` | Diretório raiz dos artefatos (namespaces em `/app/data/assessment/<namespace>`) |
 | `VENV_DIR` | `./.venv` | Caminho do ambiente virtual Python |
+
+O coletor roda com apenas 1 pod (StatefulSet com replicas fixo em 1 e sem autoscaler configurado).
 
 ---
 
@@ -340,7 +348,7 @@ oc-health-artifacts-20260801_120000/
 - Manifests de Secret são **removidos** (ou listados em dry-run) antes de compartilhar os artefatos.
 - O passo de anonimização mascara credenciais, tokens, certificados e dados pessoais em todos os arquivos.
 - Sempre revise o diretório de saída antes de compartilhá-lo externamente.
-- O `.gitignore` exclui `oc-health-artifacts-*/` e arquivos de backup `.bak`.
+- O `.gitignore` exclui artefatos gerados em `data/` (para execuções locais) e arquivos de backup `.bak`.
 
 ---
 

@@ -512,7 +512,9 @@ collect_pod_logs_grouped_by_app() {
 main() {
   local namespace=""
   local output_dir=""
+  local requested_output_dir=""
   local tail_lines="300"
+  local fixed_output_dir="/app/data/assessment"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -521,7 +523,8 @@ main() {
         shift 2
         ;;
       -o|--output-dir)
-        output_dir="${2:-}"
+        requested_output_dir="${2:-}"
+        [[ -n "$requested_output_dir" ]] || fail "$1 requires a directory"
         shift 2
         ;;
       --tail-lines)
@@ -544,8 +547,10 @@ main() {
   command -v oc >/dev/null 2>&1 || fail "Command 'oc' not found"
   oc whoami >/dev/null 2>&1 || fail "No authenticated OpenShift session. Run: oc login"
 
-  if [[ -z "$output_dir" ]]; then
-    output_dir="./oc-health-artifacts-$(date '+%Y%m%d_%H%M%S')"
+  output_dir="$fixed_output_dir"
+
+  if [[ -n "$requested_output_dir" && "$requested_output_dir" != "$fixed_output_dir" ]]; then
+    log "Ignoring custom output directory and using fixed path: $fixed_output_dir"
   fi
 
   local ns_dir="$output_dir/$namespace"

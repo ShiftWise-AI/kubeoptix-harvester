@@ -24,14 +24,16 @@ COLLECT_SCRIPT="$SCRIPT_DIR/oc_collect_namespace.sh"
 
 [[ -f "$COLLECT_SCRIPT" ]] || fail "Base script not found: $COLLECT_SCRIPT"
 
-OUTPUT_DIR="./oc-health-artifacts-$(date '+%Y%m%d_%H%M%S')"
+OUTPUT_DIR="/app/data/assessment"
+REQUESTED_OUTPUT_DIR=""
 TAIL_LINES="300"
 NAMESPACES="default "
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--output-dir)
-      OUTPUT_DIR="${2:-}"
+      REQUESTED_OUTPUT_DIR="${2:-}"
+      [[ -n "$REQUESTED_OUTPUT_DIR" ]] || fail "$1 requires a directory"
       shift 2
       ;;
     --tail-lines)
@@ -55,6 +57,9 @@ done
 [[ "$TAIL_LINES" =~ ^[0-9]+$ ]] || fail "--tail-lines must be numeric"
 command -v oc >/dev/null 2>&1 || fail "Command 'oc' not found in PATH"
 oc whoami >/dev/null 2>&1 || fail "No authenticated OpenShift session. Run: oc login"
+if [[ -n "$REQUESTED_OUTPUT_DIR" && "$REQUESTED_OUTPUT_DIR" != "$OUTPUT_DIR" ]]; then
+  echo "[WARN] Ignoring custom output directory and using fixed path: $OUTPUT_DIR"
+fi
 mkdir -p "$OUTPUT_DIR"
 
 for ns in $NAMESPACES; do

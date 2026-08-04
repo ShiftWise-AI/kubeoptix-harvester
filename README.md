@@ -115,8 +115,11 @@ Useful environment variables:
 | `NS` | `shiftwise-ai` | Target namespace |
 | `RESET` | `true` | Remove previous release and namespace before install |
 | `WAIT_BUILD` | `true` | Follow build logs until build completes |
-| `GIT_URI` | `https://github.com/ShiftWise-AI/kubeoptix-harvester.git` | Source repository URL for BuildConfig |
-| `GIT_REF` | `feature/ocp` | Git branch/tag used by BuildConfig |
+| `BUILD_FROM_LOCAL` | `true` | Uses `oc start-build --from-dir=.` so deployed image matches local workspace changes |
+| `GIT_URI` | `https://github.com/ShiftWise-AI/kubeoptix-harvester.git` | Source repository URL used only when `BUILD_FROM_LOCAL=false` |
+| `GIT_REF` | `feature/ocp` | Git branch/tag used only when `BUILD_FROM_LOCAL=false` |
+| `scalePolicy.enabled` | `true` | Creates an admission policy that denies scaling the StatefulSet above 1 replica |
+| `scalePolicy.maxReplicas` | `1` | Maximum replicas allowed for the harvester StatefulSet |
 
 Examples:
 
@@ -126,6 +129,9 @@ RESET=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
 
 # Start build without waiting in foreground
 WAIT_BUILD=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+
+# Force build from remote Git source instead of local workspace
+BUILD_FROM_LOCAL=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
 ```
 
 ---
@@ -226,9 +232,11 @@ Usage:
 
 Options:
   --namespaces   Space-separated list of namespaces to collect (required)
-  -o             Output directory (default: ./oc-health-artifacts-<timestamp>)
+  -o             Output directory (fixed at /app/data/assessment)
   --tail-lines   Number of log lines to tail per pod (default: 300)
 ```
+
+Note: the collector enforces a fixed output root (`/app/data/assessment`). Any custom `-o` value is ignored.
 
 ---
 
@@ -252,9 +260,9 @@ Core collection script. Executes three ordered steps per namespace:
 
 | Step | What is collected | Output path |
 |---|---|---|
-| 1/3 | Additional namespaced resources (300+ CRD kinds) | `<ns>/resources/<kind>/<name>.yaml` |
-| 2/3 | Core manifests (Deployment, Service, Route, etc.) | `<ns>/apps/<app>/<kind>/<name>.yaml` |
-| 3/3 | Pod logs (grouped by `app` label) | `<ns>/apps/<app>/pod-logs/<pod>.log` |
+| 1/3 | Additional namespaced resources (300+ CRD kinds) | `<output_dir>/<namespace>/resources/<kind>/<name>.yaml` |
+| 2/3 | Core manifests (Deployment, Service, Route, etc.) | `<output_dir>/<namespace>/apps/<app>/<kind>/<name>.yaml` |
+| 3/3 | Pod logs (grouped by `app` label) | `<output_dir>/<namespace>/apps/<app>/pod-logs/<pod>.log` |
 
 Resources without an `app` label are stored under `__no_app__`.
 
@@ -302,7 +310,7 @@ Usage:
 After a full run, the artifact directory looks like:
 
 ```
-oc-health-artifacts-20260801_120000/
+/app/data/assessment/
 ├── worknodes/
 │   ├── worker-node-01.yaml
 │   └── worker-node-02.yaml
@@ -329,8 +337,11 @@ oc-health-artifacts-20260801_120000/
 |---|---|---|
 | `NAMESPACES` | `default ` | Namespaces collected when `--namespaces` is omitted |
 | `TAIL_LINES` | `300` | Log lines per pod |
-| `OUTPUT_DIR` | `./oc-health-artifacts-<ts>` | Artifact root directory |
+| `OUTPUT_DIR` | `/app/data/assessment` | Artifact root directory (namespaces under `/app/data/assessment/<namespace>`) |
 | `VENV_DIR` | `./.venv` | Python virtual environment path |
+
+The collector runs as a single pod only (StatefulSet replicas fixed at 1, no autoscaler configured).
+At the end of each run, the script prints an explicit en-US completion message with the final artifacts directory.
 
 ---
 
@@ -339,7 +350,7 @@ oc-health-artifacts-20260801_120000/
 - Secret manifests are **removed** (or reported in dry-run) before sharing artifacts.
 - The anonymization step masks credentials, tokens, certificates, and PII in all files.
 - Always review the output directory before sharing it externally.
-- The `.gitignore` excludes `oc-health-artifacts-*/` and `.bak` backup files.
+- The `.gitignore` excludes generated artifacts under `data/` (for local runs) and `.bak` backup files.
 
 ---
 

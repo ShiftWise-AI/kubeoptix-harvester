@@ -1,5 +1,17 @@
+#Coletar
 curl -k -X POST 'https://harvester-shiftwise-ai.apps-crc.testing/collect' \
   -H 'Content-Type: application/json' \
-  -d '{"namespaces":"shiftwise-ai openshift-monitoring default"}'
+  -d '{"namespaces":"openshift-monitoring default"}'
 
 oc logs -f -n shiftwise-ai statefulset/kubeoptix-harvester | stdbuf -oL awk '{gsub(/\r/,""); printf "\r%-220s",$0; fflush()} END{print ""}'
+
+
+ainda continuar sendo criada a pasta oc-health-artifacts-* essa pasta NAO DEVE SER CRIADA no lugar use essas estrutura:
+/app/data/assessment/<namespace_a>
+/app/data/assessment/<namespace_b>
+/app/data/assessment/<namespace_c>
+/app/data/assessment/worknodes
+
+criar uma policie para impedir de escalar mais de 1 replica 
+adicionar mensagem de finalizacao do scirpt run-ocp.sh no final da coleta (en-US) 
+o log dos probes nao devem aparecer na console

@@ -66,7 +66,6 @@ def run_collection(namespaces: str) -> None:
 
 @app.get("/health", tags=["infra"])
 def healthcheck() -> dict[str, str]:
-    logger.info("Healthcheck endpoint called")
     return {"status": "ok"}
 
 
@@ -94,5 +93,5 @@ if __name__ == "__main__":
         port=int(os.getenv("API_PORT", "8000")),
         reload=False,
         log_level=LOG_LEVEL.lower(),
-        access_log=True,
+        access_log=False,
     )
