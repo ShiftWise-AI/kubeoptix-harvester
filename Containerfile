@@ -25,18 +25,18 @@ RUN dnf install -y \
     && chmod +x /usr/local/bin/oc /usr/local/bin/kubectl \
     && rm -f /tmp/openshift-client-linux.tar.gz \
     && dnf clean all \
-    && useradd -m -s /bin/bash harvester \
+    && useradd -m -s /bin/bash kubeoptix \
     && mkdir -p $LOG_DIR \
     && mkdir -p $DATA_DIR \
     && mkdir -p $SRC_DIR \
     && mkdir -p $COLLECTOR_DIR \
     && mkdir -p $VENV_DIR \
     && mkdir -p /tmp/.kube \
-    && chown -R harvester:harvester /app \
+    && chown -R kubeoptix:kubeoptix /app \
     && chmod -R 777 /tmp \
     && chmod -R u+rwX /app
 
-USER harvester
+USER kubeoptix
 
 COPY run-ocp.sh .
 COPY requirements.txt .
