@@ -34,16 +34,9 @@ items = payload.get("items", [])
 namespaces = []
 for item in items:
   metadata = item.get("metadata", {}) if isinstance(item, dict) else {}
-  status = item.get("status", {}) if isinstance(item, dict) else {}
-  namespaces.append(
-    {
-      "name": metadata.get("name"),
-      "phase": status.get("phase"),
-      "creationTimestamp": metadata.get("creationTimestamp"),
-      "labels": metadata.get("labels", {}),
-      "annotations": metadata.get("annotations", {}),
-    }
-  )
+  name = metadata.get("name")
+  if isinstance(name, str) and name:
+    namespaces.append(name)
 
 json.dump(
   {

@@ -48,7 +48,7 @@ class CleanupResponse(BaseModel):
 class NamespacesResponse(BaseModel):
     status: str
     count: int
-    namespaces: list[dict[str, object]]
+    namespaces: list[str]
 
 
 ASSESSMENT_DIR = Path("/app/data/assessment")
@@ -148,10 +148,17 @@ def list_namespaces() -> NamespacesResponse:
     if not isinstance(namespaces, list):
         raise HTTPException(status_code=500, detail="campo namespaces invalido no JSON retornado")
 
+    namespace_names: list[str] = []
+    for namespace in namespaces:
+        if isinstance(namespace, str):
+            namespace_names.append(namespace)
+        else:
+            raise HTTPException(status_code=500, detail="campo namespaces deve conter apenas strings")
+
     return NamespacesResponse(
         status=str(payload.get("status", "ok")),
-        count=int(payload.get("count", len(namespaces))),
-        namespaces=namespaces,
+        count=int(payload.get("count", len(namespace_names))),
+        namespaces=namespace_names,
     )
 
 
