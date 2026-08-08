@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("kubeoptix.api")
 RUN_SCRIPT = "/app/run-ocp.sh"
+PROGRESS_PREFIX = "[PROGRESS] "
 
 
 app = FastAPI(
@@ -53,6 +55,14 @@ class NamespacesResponse(BaseModel):
 
 ASSESSMENT_DIR = Path("/app/data/assessment")
 NAMESPACES_SCRIPT = "/app/collectors/oc_collect_namespaces.sh"
+collection_state = {"progress": 0, "running": False}
+collection_state_lock = threading.Lock()
+
+
+def update_collection_progress(progress: int) -> None:
+    if 0 <= progress <= 100:
+        with collection_state_lock:
+            collection_state["progress"] = progress
 
 
 def run_collection(namespaces: str) -> None:
@@ -60,27 +70,39 @@ def run_collection(namespaces: str) -> None:
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
-    process = subprocess.Popen(
-        ["bash", RUN_SCRIPT, "--namespaces", namespaces],
-        cwd="/app",
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
+    try:
+        process = subprocess.Popen(
+            ["bash", RUN_SCRIPT, "--namespaces", namespaces],
+            cwd="/app",
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
 
-    if process.stdout is not None:
-        for line in process.stdout:
-            msg = line.rstrip().replace("\r", "")
-            if msg:
-                logger.info("[collector] %s", msg)
+        if process.stdout is not None:
+            for line in process.stdout:
+                msg = line.rstrip().replace("\r", "")
+                if msg.startswith(PROGRESS_PREFIX):
+                    try:
+                        update_collection_progress(int(msg.removeprefix(PROGRESS_PREFIX)))
+                    except ValueError:
+                        logger.warning("Invalid collection progress marker: %s", msg)
+                if msg:
+                    logger.info("[collector] %s", msg)
 
-    return_code = process.wait()
-    if return_code == 0:
-        logger.info("Collection script finished successfully")
-    else:
-        logger.error("Collection script failed with exit code: %s", return_code)
+        return_code = process.wait()
+        if return_code == 0:
+            update_collection_progress(100)
+            logger.info("Collection script finished successfully")
+        else:
+            logger.error("Collection script failed with exit code: %s", return_code)
+    except Exception:
+        logger.exception("Failed to execute collection script")
+    finally:
+        with collection_state_lock:
+            collection_state["running"] = False
 
 
 def fetch_namespaces() -> dict[str, object]:
@@ -133,11 +155,23 @@ def collect(payload: CollectRequest, background_tasks: BackgroundTasks) -> Colle
     if not os.path.isfile(RUN_SCRIPT):
         raise HTTPException(status_code=500, detail="script run-ocp.sh nao encontrado")
 
+    with collection_state_lock:
+        if collection_state["running"]:
+            raise HTTPException(status_code=409, detail="uma coleta ja esta em execucao")
+        collection_state["progress"] = 0
+        collection_state["running"] = True
+
     background_tasks.add_task(run_collection, namespaces)
     return CollectResponse(
         status="accepted",
         message="Coleta iniciada em background",
     )
+
+
+@app.get("/collect/status", response_model=int, tags=["collector"])
+def collection_status() -> int:
+    with collection_state_lock:
+        return int(collection_state["progress"])
 
 
 @app.get("/namespaces", response_model=NamespacesResponse, tags=["collector"])

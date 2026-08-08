@@ -3,6 +3,13 @@ curl -k -X POST 'https://harvester-shiftwise-ai.apps-crc.testing/collect' \
   -H 'Content-Type: application/json' \
   -d '{"namespaces":"openshift-monitoring default"}'
 
+# Consultar progresso da coleta (retorna um numero entre 0 e 100)
+curl -k -X GET 'https://harvester-shiftwise-ai.apps-crc.testing/collect/status' \
+  -H 'accept: application/json'
+
+# Acompanhar o progresso a cada 2 segundos
+watch -n 2 "curl -ks 'https://harvester-shiftwise-ai.apps-crc.testing/collect/status'"
+
 # Listar namespaces em JSON
 curl -k -X GET 'https://harvester-shiftwise-ai.apps-crc.testing/namespaces' \
   -H 'accept: application/json'
