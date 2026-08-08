@@ -37,6 +37,8 @@ spec:
               value: {{ .Values.podEnv.HOME | quote }}
             - name: KUBECONFIG
               value: {{ .Values.podEnv.KUBECONFIG | quote }}
+            - name: TZ
+              value: {{ .Values.podEnv.TZ | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.api.targetPort }}
