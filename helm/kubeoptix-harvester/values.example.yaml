@@ -75,6 +75,7 @@ persistence:
 podEnv:
   HOME: /tmp
   KUBECONFIG: /tmp/.kube/config
+  TZ: "America/Sao_Paulo"
 
 startup:
   loginWithServiceAccount: true
