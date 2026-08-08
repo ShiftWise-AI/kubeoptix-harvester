@@ -140,6 +140,55 @@ def fetch_namespaces() -> dict[str, object]:
 
     return payload
 
+def build_tree(path: Path) -> dict:
+    """Constrói recursivamente uma estrutura semelhante ao comando tree."""
+    if path.is_file():
+        return {
+            "name": path.name,
+            "type": "file",
+        }
+
+    children = []
+    try:
+        entries = sorted(
+            path.iterdir(),
+            key=lambda entry: (
+                not entry.is_dir(),  # diretórios primeiro
+                entry.name.lower(),
+            ),
+        )
+        for entry in entries:
+            # Ignora arquivos/diretórios ocultos
+            if entry.name.startswith("."):
+                continue
+            children.append(build_tree(entry))
+    except PermissionError:
+        return {
+            "name": path.name,
+            "type": "directory",
+            "error": "Permission denied",
+        }
+
+    return {
+        "name": path.name,
+        "type": "directory",
+        "children": children,
+    }
+@app.get("/api/assessment", response_model=dict, tags=["collector"])
+def assessment_tree():
+    """Retorna a estrutura de diretórios do assessment."""
+    root = Path(ASSESSMENT_DIR)
+    if not root.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Assessment directory not found: {ASSESSMENT_DIR}",
+        )
+    if not root.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"ASSESSMENT_DIR is not a directory: {ASSESSMENT_DIR}",
+        )
+    return build_tree(root)
 
 @app.get("/health", tags=["infra"])
 def healthcheck() -> dict[str, str]:

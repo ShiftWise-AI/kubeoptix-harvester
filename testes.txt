@@ -14,6 +14,9 @@ watch -n 2 "curl -ks 'https://harvester-shiftwise-ai.apps-crc.testing/collect/st
 curl -k -X GET 'https://harvester-shiftwise-ai.apps-crc.testing/namespaces' \
   -H 'accept: application/json'
 
+curl -k -X GET 'https://kubeoptix-dashboard-shiftwise-ai.apps-crc.testing/api/assessment' \
+  -H 'accept: application/json'
+
 
 oc logs -f -n shiftwise-ai "$(oc get sts -n shiftwise-ai -o name | head -n1)" | stdbuf -oL awk '{gsub(/\r/,""); printf "\r%-220s",$0; fflush()} END{print ""}'
 
