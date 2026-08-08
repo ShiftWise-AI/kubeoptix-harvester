@@ -174,7 +174,7 @@ def build_tree(path: Path) -> dict:
         "type": "directory",
         "children": children,
     }
-@app.get("/api/assessment", response_model=dict, tags=["collector"])
+@app.get("/assessment", response_model=dict, tags=["collector"])
 def assessment_tree():
     """Retorna a estrutura de diretórios do assessment."""
     root = Path(ASSESSMENT_DIR)
