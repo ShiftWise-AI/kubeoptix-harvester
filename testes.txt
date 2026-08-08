@@ -14,7 +14,7 @@ watch -n 2 "curl -ks 'https://harvester-shiftwise-ai.apps-crc.testing/collect/st
 curl -k -X GET 'https://harvester-shiftwise-ai.apps-crc.testing/namespaces' \
   -H 'accept: application/json'
 
-curl -k -X GET 'https://kubeoptix-dashboard-shiftwise-ai.apps-crc.testing/api/assessment' \
+curl -k -X GET 'https://harvester-shiftwise-ai.apps-crc.testing/assessment' \
   -H 'accept: application/json'
 
 
