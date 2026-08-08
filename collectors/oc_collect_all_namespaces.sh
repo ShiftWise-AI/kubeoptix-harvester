@@ -62,9 +62,19 @@ if [[ -n "$REQUESTED_OUTPUT_DIR" && "$REQUESTED_OUTPUT_DIR" != "$OUTPUT_DIR" ]];
 fi
 mkdir -p "$OUTPUT_DIR"
 
-for ns in $NAMESPACES; do
+read -ra NAMESPACE_LIST <<< "$NAMESPACES"
+TOTAL_NAMESPACES=${#NAMESPACE_LIST[@]}
+(( TOTAL_NAMESPACES > 0 )) || fail "At least one namespace is required"
+
+for index in "${!NAMESPACE_LIST[@]}"; do
+  ns="${NAMESPACE_LIST[$index]}"
+  progress_start=$(( 10 + index * 75 / TOTAL_NAMESPACES ))
+  progress_end=$(( 10 + (index + 1) * 75 / TOTAL_NAMESPACES ))
+
   echo "[INFO] Collecting namespace: $ns"
-  bash "$COLLECT_SCRIPT" -n "$ns" -o "$OUTPUT_DIR" --tail-lines "$TAIL_LINES"
+  COLLECTION_PROGRESS_START="$progress_start" \
+    COLLECTION_PROGRESS_END="$progress_end" \
+    bash "$COLLECT_SCRIPT" -n "$ns" -o "$OUTPUT_DIR" --tail-lines "$TAIL_LINES"
 done
 
 echo "[INFO] Collection completed in: $OUTPUT_DIR"

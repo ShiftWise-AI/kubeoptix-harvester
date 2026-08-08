@@ -105,6 +105,19 @@ finish_status_line() {
   printf '\n'
 }
 
+emit_collection_progress() {
+  local local_percent="$1"
+  local progress_start="${COLLECTION_PROGRESS_START:-}"
+  local progress_end="${COLLECTION_PROGRESS_END:-}"
+
+  [[ "$progress_start" =~ ^[0-9]+$ ]] || return
+  [[ "$progress_end" =~ ^[0-9]+$ ]] || return
+  (( progress_end >= progress_start )) || return
+
+  local progress=$(( progress_start + (progress_end - progress_start) * local_percent / 100 ))
+  printf '\n[PROGRESS] %d\n' "$progress"
+}
+
 sanitize_name() {
   local value="$1"
   value="${value//\//_}"
@@ -469,8 +482,10 @@ collect_additional_namespace_resources() {
     done
 
     show_progress "Collecting namespace resources" "$((index + 1))" "$total_kinds"
+    emit_collection_progress "$(( (index + 1) * 30 / total_kinds ))"
   done
   clear_progress_line
+  emit_collection_progress 30
 }
 
 # Collect pod logs and group them by application label after the namespace resources are gathered.
@@ -485,6 +500,7 @@ collect_pod_logs_grouped_by_app() {
   local total_pods=${#pods[@]}
   if (( total_pods == 0 )); then
     log "No pods found for namespace: $namespace"
+    emit_collection_progress 100
     return
   fi
 
@@ -505,8 +521,10 @@ collect_pod_logs_grouped_by_app() {
     oc logs "$pod" -n "$namespace" --all-containers --tail="$tail_lines" >"$pod_log" 2>&1 || true
 
     show_progress "Collecting pod logs" "$((index + 1))" "$total_pods"
+    emit_collection_progress "$(( 75 + (index + 1) * 25 / total_pods ))"
   done
   clear_progress_line
+  emit_collection_progress 100
 }
 
 main() {
@@ -561,15 +579,14 @@ main() {
   collect_additional_namespace_resources "$namespace" "$ns_dir"
 
   log "Step 2/3: collecting core resource manifests"
-  collect_resource_kind_items "$namespace" "$ns_dir" "deployment"
-  collect_resource_kind_items "$namespace" "$ns_dir" "deploymentconfig"
-  collect_resource_kind_items "$namespace" "$ns_dir" "statefulset"
-  collect_resource_kind_items "$namespace" "$ns_dir" "configmap"
-  collect_resource_kind_items "$namespace" "$ns_dir" "route"
-  collect_resource_kind_items "$namespace" "$ns_dir" "service"
-  collect_resource_kind_items "$namespace" "$ns_dir" "job"
-  collect_resource_kind_items "$namespace" "$ns_dir" "replicaset"
-  collect_resource_kind_items "$namespace" "$ns_dir" "hpa"
+  local core_resource_kinds=(
+    deployment deploymentconfig statefulset configmap route
+    service job replicaset hpa
+  )
+  for index in "${!core_resource_kinds[@]}"; do
+    collect_resource_kind_items "$namespace" "$ns_dir" "${core_resource_kinds[$index]}"
+    emit_collection_progress "$(( 30 + (index + 1) * 45 / ${#core_resource_kinds[@]} ))"
+  done
 
   log "Step 3/3: collecting application pod logs"
   collect_pod_logs_grouped_by_app "$namespace" "$ns_dir" "$tail_lines"

@@ -103,15 +103,19 @@ fi
 
 echo "[INFO] Step 1/4: collecting worker node YAMLs..."
 bash "$COLLECT_WORKNODES_SCRIPT" -o "$ARTIFACTS_DIR"
+echo "[PROGRESS] 10"
 
 echo "[INFO] Step 2/4: collecting namespace artifacts..."
 bash "$COLLECT_SCRIPT" "${collect_args[@]}"
+echo "[PROGRESS] 85"
 
 echo "[INFO] Step 3/4: removing secret manifests..."
 bash "$REMOVE_SECRETS_SCRIPT" -d "$ARTIFACTS_DIR" --dry-run
+echo "[PROGRESS] 90"
 
 echo "[INFO] Step 4/4: anonymizing collected artifacts..."
 python3 "$ANONYMIZATION_SCRIPT" "$ARTIFACTS_DIR"
+echo "[PROGRESS] 100"
 
 printf '\n'
 echo "[INFO] Collection finished successfully."

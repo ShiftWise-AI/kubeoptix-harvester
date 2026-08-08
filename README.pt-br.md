@@ -132,6 +132,16 @@ WAIT_BUILD=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
 BUILD_FROM_LOCAL=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
 ```
 
+### Progresso da coleta
+
+Após iniciar uma coleta com `POST /collect`, consulte `GET /collect/status`. A resposta JSON é um valor numérico entre `0` e `100`, por exemplo:
+
+```json
+50
+```
+
+Uma nova coleta começa em `0` e avança gradualmente conforme namespaces, tipos de recursos e pods são processados. Enquanto houver uma coleta em execução, uma nova chamada a `POST /collect` retorna HTTP `409`.
+
 ---
 
 ## Token Git para Clone de Repositório Privado
