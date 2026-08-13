@@ -4,14 +4,18 @@ set -Eeuo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  run_assessment.sh [--namespaces "ns1 ns2"] [-o <output_dir>] [--tail-lines N]
+  run-ocp.sh [--deploy-namespace <ns>] [--release-name <name>] [--chart-dir <dir>] [--values-file <file>] [--wait-timeout <duration>] [--namespaces "ns1 ns2"] [-o <output_dir>] [--tail-lines N]
 
 Description:
-  1. Collects artifacts from OpenShift namespaces
-  2. Collects worker node YAMLs in <output_dir>/worknodes
+  1. Deploys/updates Helm chart in OpenShift
+  2. If namespace does not exist, creates it before deployment
+  3. Waits for StatefulSet pod stabilization
+  4. Collects artifacts from OpenShift namespaces
+  5. Collects worker node YAMLs in <output_dir>/worknodes
 
 Examples:
-  ./run_assessment.sh --namespaces "app-a app-b" -o ./output-dir
+  ./run-ocp.sh --deploy-namespace shiftwise-ai --release-name kubeoptix-harvester
+  ./run-ocp.sh --namespaces "app-a app-b" -o ./output-dir
 EOF
 }
 
@@ -28,6 +32,11 @@ REMOVE_SECRETS_SCRIPT="$SCRIPT_DIR/collectors/oc_remove_secret_manifests.sh"
 ANONYMIZATION_SCRIPT="$SCRIPT_DIR/src/anonymization.py"
 REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
 #VENV_DIR="$SCRIPT_DIR/.venv"
+CHART_DIR="$SCRIPT_DIR/helm/kubeoptix-harvester"
+VALUES_FILE="$CHART_DIR/values.yaml"
+DEPLOY_NAMESPACE="shiftwise-ai"
+HELM_RELEASE="kubeoptix-harvester"
+WAIT_TIMEOUT="10m"
 
 OUTPUT_DIR=""
 REQUESTED_OUTPUT_DIR=""
@@ -37,6 +46,23 @@ FIXED_OUTPUT_DIR="/app/data/assessment"
 
 normalize_output_dir() {
   printf '%s' "$FIXED_OUTPUT_DIR"
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
+}
+
+wait_for_statefulset_ready() {
+  local namespace="$1"
+  local release="$2"
+  local timeout="$3"
+  local sts_name
+
+  sts_name="$(oc -n "$namespace" get statefulset -l "app.kubernetes.io/instance=$release" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  [[ -n "$sts_name" ]] || fail "No StatefulSet found for Helm release '$release' in namespace '$namespace'"
+
+  echo "[INFO] Waiting for StatefulSet rollout: $sts_name (timeout: $timeout)"
+  oc -n "$namespace" rollout status "statefulset/$sts_name" --timeout="$timeout"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -54,6 +80,31 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tail-lines)
       TAIL_LINES="${2:-}"
+      shift 2
+      ;;
+    --deploy-namespace)
+      DEPLOY_NAMESPACE="${2:-}"
+      [[ -n "$DEPLOY_NAMESPACE" ]] || fail "--deploy-namespace requires a namespace"
+      shift 2
+      ;;
+    --release-name)
+      HELM_RELEASE="${2:-}"
+      [[ -n "$HELM_RELEASE" ]] || fail "--release-name requires a release name"
+      shift 2
+      ;;
+    --chart-dir)
+      CHART_DIR="${2:-}"
+      [[ -n "$CHART_DIR" ]] || fail "--chart-dir requires a directory"
+      shift 2
+      ;;
+    --values-file)
+      VALUES_FILE="${2:-}"
+      [[ -n "$VALUES_FILE" ]] || fail "--values-file requires a file path"
+      shift 2
+      ;;
+    --wait-timeout)
+      WAIT_TIMEOUT="${2:-}"
+      [[ -n "$WAIT_TIMEOUT" ]] || fail "--wait-timeout requires a duration (e.g. 10m)"
       shift 2
       ;;
     -h|--help)
@@ -76,6 +127,29 @@ ARTIFACTS_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 if [[ -n "$REQUESTED_OUTPUT_DIR" && "$REQUESTED_OUTPUT_DIR" != "$FIXED_OUTPUT_DIR" ]]; then
   echo "[WARN] Ignoring custom output directory and using fixed path: $FIXED_OUTPUT_DIR"
 fi
+
+[[ -d "$CHART_DIR" ]] || fail "Helm chart directory not found: $CHART_DIR"
+[[ -f "$VALUES_FILE" ]] || fail "Helm values file not found: $VALUES_FILE"
+require_cmd oc
+require_cmd helm
+
+echo "[INFO] Checking namespace: $DEPLOY_NAMESPACE"
+if oc get namespace "$DEPLOY_NAMESPACE" >/dev/null 2>&1; then
+  echo "[INFO] Namespace '$DEPLOY_NAMESPACE' already exists. Updating Helm release '$HELM_RELEASE'."
+else
+  echo "[INFO] Namespace '$DEPLOY_NAMESPACE' not found. Creating namespace."
+  oc create namespace "$DEPLOY_NAMESPACE"
+fi
+
+echo "[INFO] Applying updated Helm chart..."
+helm upgrade --install "$HELM_RELEASE" "$CHART_DIR" \
+  --namespace "$DEPLOY_NAMESPACE" \
+  --values "$VALUES_FILE" \
+  --wait \
+  --timeout "$WAIT_TIMEOUT"
+
+wait_for_statefulset_ready "$DEPLOY_NAMESPACE" "$HELM_RELEASE" "$WAIT_TIMEOUT"
+echo "[INFO] Helm deployment completed and pod stabilized."
 
 # Remove only legacy artifact roots that should no longer be generated.
 find "/app/data" -mindepth 1 -maxdepth 1 -type d -name 'oc-health-artifacts-*' -exec rm -rf {} +

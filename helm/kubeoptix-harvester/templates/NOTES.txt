@@ -14,8 +14,8 @@
 5. Start image build (first deployment):
    oc start-build {{ include "kubeoptix-harvester.fullname" . }} -n {{ include "kubeoptix-harvester.namespace" . }} --follow
 
-6. Check route URL:
-   oc get route {{ .Values.route.name }} -n {{ include "kubeoptix-harvester.namespace" . }}
+6. Check service:
+   oc get svc {{ .Values.service.api.name }} -n {{ include "kubeoptix-harvester.namespace" . }}
 
-7. Test API:
-   curl -k https://$(oc get route {{ .Values.route.name }} -n {{ include "kubeoptix-harvester.namespace" . }} -o jsonpath='{.spec.host}')/health
+7. Test API from cluster:
+   oc run curl --rm -i --restart=Never -n {{ include "kubeoptix-harvester.namespace" . }} --image=curlimages/curl -- curl -sS http://{{ .Values.service.api.name }}:{{ .Values.service.api.port }}/health

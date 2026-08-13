@@ -40,23 +40,12 @@ rbac:
   clusterRoleName: cluster-reader
 
 service:
-  headless:
-    enabled: true
-    name: harvester
-    port: 8000
   api:
     enabled: true
     name: harvester-api
     type: ClusterIP
     port: 8000
     targetPort: 8000
-
-route:
-  enabled: true
-  name: harvester
-  host: ""
-  termination: edge
-  insecureEdgeTerminationPolicy: Redirect
 
 scalePolicy:
   enabled: true
@@ -87,6 +76,25 @@ startup:
       && \
     echo "[INFO] Starting API process" && \
     exec /app/.venv/bin/python /app/src/api.py
+
+probes:
+  enabled: true
+  path: /health
+  startup:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 12
+  readiness:
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  liveness:
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
 
 resources:
   requests:
