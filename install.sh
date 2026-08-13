@@ -136,19 +136,28 @@ helm status "$RELEASE" -n "$NS"
 echo "[INFO] Current resources:"
 oc get all -n "$NS"
 
-echo "[INFO] Route health test:"
-ROUTE_HOST="$(oc get route harvester -n "$NS" -o jsonpath='{.spec.host}' 2>/dev/null || true)"
-if [[ -n "$ROUTE_HOST" ]]; then
-  echo "[INFO] URL: https://$ROUTE_HOST/health"
-  curl -k --fail --show-error --silent "https://$ROUTE_HOST/health" || {
-    echo "[WARN] Health check failed. Inspect pods/logs with:"
-    echo "  oc get pods -n $NS"
-    echo "  oc logs -n $NS statefulset/$RELEASE --tail=200"
-    exit 1
-  }
-  echo
-  echo "[INFO] Installation and health check completed successfully."
-else
-  echo "[WARN] Route 'harvester' not found in namespace $NS"
-  echo "[WARN] Verify route settings in values and chart templates."
+echo "[INFO] Service health test:"
+POD_NAME="$(oc get pod -n "$NS" -l app.kubernetes.io/instance="$RELEASE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+SVC_NAME="$(oc get svc -n "$NS" -l app.kubernetes.io/instance="$RELEASE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+
+if [[ -z "$POD_NAME" || -z "$SVC_NAME" ]]; then
+  echo "[WARN] Could not resolve pod/service for release $RELEASE in namespace $NS"
+  echo "[WARN] Verify deployed objects with: oc get all -n $NS"
+  exit 1
 fi
+
+oc exec -n "$NS" "$POD_NAME" -- /bin/sh -lc "python - <<'PY'
+import urllib.request
+url = 'http://${SVC_NAME}:8000/health'
+with urllib.request.urlopen(url, timeout=10) as response:
+    body = response.read().decode()
+    print(f'health_url={url} status={response.status} body={body}')
+PY" || {
+  echo "[WARN] Health check failed. Inspect pods/logs with:"
+  echo "  oc get pods -n $NS"
+  echo "  oc logs -n $NS statefulset/$RELEASE --tail=200"
+  exit 1
+}
+
+echo
+echo "[INFO] Installation and health check completed successfully."
