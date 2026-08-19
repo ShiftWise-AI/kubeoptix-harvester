@@ -25,7 +25,6 @@ ROOT_DIR="$SCRIPT_DIR"
 COLLECT_SCRIPT="$SCRIPT_DIR/collectors/oc_collect_all_namespaces.sh"
 COLLECT_WORKNODES_SCRIPT="$SCRIPT_DIR/collectors/oc_collect_worknodes.sh"
 REMOVE_SECRETS_SCRIPT="$SCRIPT_DIR/collectors/oc_remove_secret_manifests.sh"
-ANONYMIZATION_SCRIPT="$SCRIPT_DIR/src/anonymization.py"
 REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
 #VENV_DIR="$SCRIPT_DIR/.venv"
 
@@ -99,19 +98,15 @@ if [[ -n "$NAMESPACES" ]]; then
 fi
 [[ -f "$COLLECT_WORKNODES_SCRIPT" ]] || fail "Worker node collection script not found: $COLLECT_WORKNODES_SCRIPT"
 [[ -f "$REMOVE_SECRETS_SCRIPT" ]] || fail "Secret removal script not found: $REMOVE_SECRETS_SCRIPT"
-[[ -f "$ANONYMIZATION_SCRIPT" ]] || fail "Anonymization script not found: $ANONYMIZATION_SCRIPT"
 
-echo "[INFO] Step 1/4: collecting worker node YAMLs..."
+echo "[INFO] Step 1/3: collecting worker node YAMLs..."
 bash "$COLLECT_WORKNODES_SCRIPT" -o "$ARTIFACTS_DIR"
 
-echo "[INFO] Step 2/4: collecting namespace artifacts..."
+echo "[INFO] Step 2/3: collecting namespace artifacts..."
 bash "$COLLECT_SCRIPT" "${collect_args[@]}"
 
-echo "[INFO] Step 3/4: removing secret manifests..."
+echo "[INFO] Step 3/3: removing secret manifests..."
 bash "$REMOVE_SECRETS_SCRIPT" -d "$ARTIFACTS_DIR" --dry-run
-
-echo "[INFO] Step 4/4: anonymizing collected artifacts..."
-python3 "$ANONYMIZATION_SCRIPT" "$ARTIFACTS_DIR"
 
 printf '\n'
 echo "[INFO] Collection finished successfully."
