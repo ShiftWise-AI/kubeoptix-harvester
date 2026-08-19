@@ -28,7 +28,7 @@
 
 ## Overview
 
-**kubeoptix-harvester** is a shell + Python toolkit that connects to a live OpenShift cluster and collects a structured snapshot of its resources. After collection, the toolkit automatically removes `Secret` manifests and anonymizes any sensitive data patterns (CPF, emails, tokens, certificates, banking data, etc.) before the artifacts are handed off for analysis.
+**kubeoptix-harvester** is a shell + Python toolkit that connects to a live OpenShift cluster and collects a structured snapshot of its resources. After collection, the toolkit scans the artifacts for `Secret` manifests before they are handed off for analysis.
 
 The entire process runs from a single entry-point script (`run.sh`) and provides an animated, single-line progress bar throughout execution.
 
@@ -83,7 +83,7 @@ The script will:
 3. Collect worker node manifests
 4. Collect namespace resources and pod logs
 5. Remove `Secret` manifests (dry-run mode — safe by default)
-6. Anonymize all collected artifacts in-place
+6. Finish the collection pipeline
 
 ---
 
@@ -209,22 +209,11 @@ flowchart TD
         F2 -- no --> F4[Skip]
     end
 
-    F3 & F4 --> G
-
-    subgraph STEP4 ["Step 4 — Anonymization"]
-        G[anonymization.py]
-        G --> G1[Walk all files in artifacts/]
-        G1 --> G2[Match sensitive patterns\nCPF · RG · Email · Phone\nToken · Certificate · Key\nIBAN · SWIFT · API key]
-        G2 --> G3[Replace matches with\n'TYPE_REMOVED' placeholder]
-        G3 --> G4[Write file in-place]
-    end
-
-    G4 --> H([Artifacts ready\nfor analysis])
+    F3 & F4 --> H([Artifacts ready\nfor analysis])
 
     style STEP1 fill:#1e3a5f,color:#fff
     style STEP2 fill:#1e3a5f,color:#fff
     style STEP3 fill:#1e3a5f,color:#fff
-    style STEP4 fill:#1e3a5f,color:#fff
     style H fill:#155724,color:#fff
 ```
 
@@ -293,7 +282,9 @@ Usage:
 
 ### `anonymization.py`
 
-Walks the entire artifact directory and masks sensitive data patterns using regex substitution.
+The script is retained in the repository for now, but is not executed by the collection pipelines.
+
+When run manually, it walks the entire artifact directory and masks sensitive data patterns using regex substitution.
 
 | Pattern key | What it matches |
 |---|---|
@@ -358,7 +349,7 @@ At the end of each run, the script prints an explicit en-US completion message w
 ## Security Notes
 
 - Secret manifests are **removed** (or reported in dry-run) before sharing artifacts.
-- The anonymization step masks credentials, tokens, certificates, and PII in all files.
+- `anonymization.py` is not executed automatically; review and sanitize artifacts before sharing them externally.
 - Always review the output directory before sharing it externally.
 - The `.gitignore` excludes generated artifacts under `data/` (for local runs) and `.bak` backup files.
 
