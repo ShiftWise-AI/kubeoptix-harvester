@@ -114,21 +114,21 @@ post_install_cleanup() {
     oc get configmaps -n "$NS" -l "$release_selector" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
   )
 
-  echo "[INFO] Cleaning orphan TLS secrets from this release (certificate leftovers)..."
+  echo "[INFO] Cleaning unused release secrets, including Helm-created auth secrets..."
   while read -r secret_name owner_kinds; do
     [[ -n "$secret_name" ]] || continue
     if contains_name "$secret_name" "${used_secrets[@]}"; then
       continue
     fi
 
-    # Skip secrets with owner references to avoid deleting active managed certs.
+    # Skip secrets with owner references to avoid deleting active managed certs or generated resources.
     if [[ -n "$owner_kinds" ]]; then
       continue
     fi
     delete_or_echo "secret" "$secret_name"
   done < <(
     oc get secrets -n "$NS" -l "$release_selector" \
-      -o jsonpath='{range .items[?(@.type=="kubernetes.io/tls")]}{.metadata.name}{" "}{range .metadata.ownerReferences[*]}{.kind}{","}{end}{"\n"}{end}' 2>/dev/null || true
+      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .metadata.ownerReferences[*]}{.kind}{","}{end}{"\n"}{end}' 2>/dev/null || true
   )
 
   echo "[INFO] Post-install cleanup finished."
