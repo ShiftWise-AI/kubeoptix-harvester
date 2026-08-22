@@ -59,6 +59,47 @@ contains_name() {
   return 1
 }
 
+cleanup_orphaned_helm_and_sa_secrets() {
+  local -a service_account_secrets=()
+  local -a sa_names=()
+
+  mapfile -t sa_names < <(
+    oc get sa -n "$NS" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
+  )
+
+  for sa_name in "${sa_names[@]}"; do
+    [[ -n "$sa_name" ]] || continue
+    while read -r ref_name; do
+      [[ -n "$ref_name" ]] || continue
+      service_account_secrets+=("$ref_name")
+    done < <(
+      oc get sa "$sa_name" -n "$NS" -o jsonpath='{range .secrets[*]}{.name}{"\n"}{end}{range .imagePullSecrets[*]}{.name}{"\n"}{end}' 2>/dev/null || true
+    )
+  done
+
+  echo "[INFO] Cleaning Helm metadata secret and orphan service-account docker secrets..."
+  while read -r secret_name; do
+    [[ -n "$secret_name" ]] || continue
+
+    if [[ "$secret_name" == sh.helm.release.v1.${RELEASE}* ]]; then
+      delete_or_echo "secret" "$secret_name"
+      continue
+    fi
+
+    if [[ "$secret_name" == *-dockercfg-* ]]; then
+      if contains_name "$secret_name" "${used_secrets[@]}"; then
+        continue
+      fi
+      if contains_name "$secret_name" "${service_account_secrets[@]}"; then
+        continue
+      fi
+      delete_or_echo "secret" "$secret_name"
+    fi
+  done < <(
+    oc get secrets -n "$NS" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
+  )
+}
+
 post_install_cleanup() {
   local release_selector="app.kubernetes.io/instance=$RELEASE"
   echo "[INFO] Starting post-install cleanup (dry-run=$CLEANUP_DRY_RUN)..."
@@ -130,6 +171,8 @@ post_install_cleanup() {
     oc get secrets -n "$NS" -l "$release_selector" \
       -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .metadata.ownerReferences[*]}{.kind}{","}{end}{"\n"}{end}' 2>/dev/null || true
   )
+
+  cleanup_orphaned_helm_and_sa_secrets
 
   echo "[INFO] Post-install cleanup finished."
 }
