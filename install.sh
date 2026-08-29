@@ -251,8 +251,8 @@ helm upgrade --install "$RELEASE" "$CHART_PATH" \
   -n "$NS" \
   -f "$VALUES_FILE" \
   --set namespace.create=false \
+  --set namespace.name="$NS" \
   --set deploy.enabled=false
-  --set namespace.name="$NS"
 
 echo "[INFO] Starting a new OpenShift build..."
 BC_NAME="$(oc get buildconfig -n "$NS" -l app.kubernetes.io/instance="$RELEASE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
