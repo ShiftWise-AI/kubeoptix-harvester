@@ -246,11 +246,12 @@ else
   oc create namespace "$NS"
 fi
 
-echo "[INFO] Installing/Upgrading the complete Helm inventory..."
+echo "[INFO] Installing/Upgrading build resources..."
 helm upgrade --install "$RELEASE" "$CHART_PATH" \
   -n "$NS" \
   -f "$VALUES_FILE" \
   --set namespace.create=false \
+  --set deploy.enabled=false
   --set namespace.name="$NS"
 
 echo "[INFO] Starting a new OpenShift build..."
@@ -272,10 +273,14 @@ fi
 echo "[INFO] Helm status:"
 helm status "$RELEASE" -n "$NS"
 
-echo "[INFO] Restarting the workload with the newly built image..."
+echo "[INFO] Installing/Upgrading the workload with the newly built image..."
+helm upgrade --install "$RELEASE" "$CHART_PATH" \
+  -n "$NS" \
+  -f "$VALUES_FILE" \
+  --set namespace.create=false
+
 STATEFULSET_NAME="$(oc get statefulset -n "$NS" -l app.kubernetes.io/instance="$RELEASE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 if [[ -n "$STATEFULSET_NAME" ]]; then
-  oc rollout restart "statefulset/$STATEFULSET_NAME" -n "$NS"
   oc rollout status "statefulset/$STATEFULSET_NAME" -n "$NS" --timeout="$WAIT_TIMEOUT"
 else
   echo "[ERROR] No StatefulSet found for release '$RELEASE' in namespace '$NS'."
