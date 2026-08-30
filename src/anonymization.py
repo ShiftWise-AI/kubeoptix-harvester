@@ -10,7 +10,7 @@ from pathlib import Path
 # Patterns for sensitive information
 PATTERNS = {
     "CPF": re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b"),
-    
+
     "RG": re.compile(
         r"\b\d{1,2}\.?\d{3}\.?\d{3}-?[0-9Xx]\b"
     ),
@@ -53,23 +53,23 @@ PATTERNS = {
     ),
 
     # Common certificates/secrets in ConfigMap/OpenShift YAML
-    "CERTIFICADO_PEM": re.compile(
+    "PEM_CERTIFICATE": re.compile(
         r"-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----",
         re.IGNORECASE
     ),
 
-    "CHAVE_PRIVADA_PEM": re.compile(
+    "PRIVATE_KEY_PEM": re.compile(
         r"-----BEGIN (?:RSA |EC |OPENSSH |)?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |)?PRIVATE KEY-----",
         re.IGNORECASE
     ),
 
-    "CAMPO_CERTIFICADO": re.compile(
+    "CERTIFICATE_FIELD": re.compile(
         r"\b(?:ca\.crt|tls\.crt|service-ca\.crt|caBundle|certificate|cert)\s*[:=]\s*[\"']?[A-Za-z0-9+/=._\-]{16,}[\"']?",
         re.IGNORECASE
     ),
 
     # Banking data: agency/account, bank codes, and international identifiers
-    "DADOS_BANCARIOS": re.compile(
+    "BANKING_DATA": re.compile(
         r"\b(?:agencia|ag\.?|conta|conta[_\s-]?corrente|conta[_\s-]?poupanca|"
         r"banco|codigo[_\s-]?banco|bank[_\s-]?code|iban|swift|bic|pix)"
         r"\s*[:=]\s*[\"']?[A-Za-z0-9.\-/]{3,}[\"']?",
@@ -87,7 +87,7 @@ PATTERNS = {
     ),
 
     # Secrets and tokens commonly present in YAML/Kubernetes/Infra
-    "SEGREDO_INFRA": re.compile(
+    "INFRA_SECRET": re.compile(
         r"\b(?:password|passwd|pwd|secret|token|clientSecret|accessKey|secretKey|"
         r"authorization|bearerToken|kubeconfig|privateKey|tls\.key|dockerconfigjson)"
         r"\s*[:=]\s*[\"']?[^\s\"']{4,}[\"']?",
@@ -97,20 +97,20 @@ PATTERNS = {
 }
 
 
-def mascarar_dados(conteudo):
-    encontrou = False
+def mask_sensitive_data(content):
+    found = False
 
-    for tipo, pattern in PATTERNS.items():
-        novo_conteudo, qtd = pattern.subn(f"[{tipo}_REMOVIDO]", conteudo)
+    for pattern_name, pattern in PATTERNS.items():
+        new_content, count = pattern.subn(f"[{pattern_name}_REMOVIDO]", content)
 
-        if qtd > 0:
-            encontrou = True
-            conteudo = novo_conteudo
+        if count > 0:
+            found = True
+            content = new_content
 
-    return conteudo, encontrou
+    return content, found
 
 
-def mostrar_progresso(message, current, total):
+def show_progress(message, current, total):
     spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
     index = current % len(spinner)
     percent = 0 if total == 0 else int((current * 100) / total)
@@ -135,53 +135,53 @@ def mostrar_progresso(message, current, total):
     sys.stdout.flush()
 
 
-def processar_arquivo(arquivo, backup=False):
+def process_file(file_path, backup=False):
     try:
         # Avoid changing binary files when processing directories
-        with open(arquivo, "rb") as f:
-            bruto = f.read()
+        with open(file_path, "rb") as file:
+            raw_data = file.read()
 
-        if b"\x00" in bruto:
+        if b"\x00" in raw_data:
             return "[SKIPPED] binary file"
 
-        conteudo = bruto.decode("utf-8", errors="ignore")
+        content = raw_data.decode("utf-8", errors="ignore")
 
-        novo_conteudo, encontrou = mascarar_dados(conteudo)
+        new_content, found = mask_sensitive_data(content)
 
-        if encontrou:
+        if found:
             if backup:
-                shutil.copy2(arquivo, f"{arquivo}.bak")
+                shutil.copy2(file_path, f"{file_path}.bak")
 
-            with open(arquivo, "w", encoding="utf-8") as f:
-                f.write(novo_conteudo)
+            with open(file_path, "w", encoding="utf-8") as file:
+                file.write(new_content)
 
-            return f"[MODIFIED] {arquivo}"
+            return f"[MODIFIED] {file_path}"
 
-        return f"[UNCHANGED] {arquivo}"
+        return f"[UNCHANGED] {file_path}"
 
-    except Exception as e:
-        return f"[ERROR] {arquivo}: {e}"
+    except Exception as exc:
+        return f"[ERROR] {file_path}: {exc}"
 
 
-def processar_diretorio(diretorio, backup=False):
-    arquivos = []
-    for raiz, _, nomes_arquivos in os.walk(diretorio):
-        for nome_arquivo in nomes_arquivos:
-            if nome_arquivo.endswith(".bak"):
+def process_directory(directory, backup=False):
+    files = []
+    for root, _, file_names in os.walk(directory):
+        for file_name in file_names:
+            if file_name.endswith(".bak"):
                 continue
-            arquivos.append(os.path.join(raiz, nome_arquivo))
+            files.append(os.path.join(root, file_name))
 
-    total = len(arquivos)
+    total = len(files)
     if total == 0:
-        mostrar_progresso("No files found", 0, 0)
+        show_progress("No files found", 0, 0)
         sys.stdout.write("\n")
         sys.stdout.flush()
         return
 
-    for index, caminho in enumerate(arquivos, start=1):
-        mostrar_progresso("Processing files", index, total)
-        status = processar_arquivo(caminho, backup)
-        mostrar_progresso(status, index, total)
+    for index, file_path in enumerate(files, start=1):
+        show_progress("Processing files", index, total)
+        status = process_file(file_path, backup)
+        show_progress(status, index, total)
 
     sys.stdout.write("\n")
     sys.stdout.flush()
@@ -193,7 +193,7 @@ def main():
     )
 
     parser.add_argument(
-        "diretorio",
+        "directory",
         help="Directory containing the files"
     )
 
@@ -205,13 +205,13 @@ def main():
 
     args = parser.parse_args()
 
-    diretorio = Path(args.diretorio)
+    directory = Path(args.directory)
 
-    if not diretorio.exists():
-        print(f"Directory not found: {diretorio}")
+    if not directory.exists():
+        print(f"Directory not found: {directory}")
         return
 
-    processar_diretorio(diretorio, args.backup)
+    process_directory(directory, args.backup)
 
 
 if __name__ == "__main__":

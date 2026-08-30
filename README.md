@@ -1,263 +1,199 @@
-# kubeoptix-harvester
+# KubeOptix Harvester
 
-> Automated extraction, sanitization, and anonymization of OpenShift cluster artifacts for offline analysis.
+KubeOptix Harvester is a small OpenShift collection and sanitization toolkit. It connects to a live cluster, inventories namespaces and workloads, exports manifests and pod logs, and writes the results under `/app/data/assessment` for downstream analysis. The project also scans collected files for common secret patterns so sensitive values can be removed before the data is shared or stored outside the cluster.
 
----
+The main runtime is a FastAPI service that exposes endpoints to trigger a collection job, check progress, list namespaces, and inspect the generated artifacts. The Helm chart packages the application for deployment on OpenShift and wires it to a StatefulSet, Service, PVC, and build pipeline.
 
-## Table of Contents
+## Features
 
-- [Overview](#overview)
-- [Prerequisites](#prerequisites)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [OpenShift Helm Installation](#openshift-helm-installation)
-- [Git Token for Private Clone](#git-token-for-private-clone)
-- [Extraction & Processing Flow](#extraction--processing-flow)
-- [Scripts Reference](#scripts-reference)
-  - [run.sh](#runsh)
-  - [oc_collect_worknodes.sh](#oc_collect_worknodessh)
-  - [oc_collect_all_namespaces.sh](#oc_collect_all_namespacessh)
-  - [oc_collect_namespace.sh](#oc_collect_namespacesh)
-  - [oc_remove_secret_manifests.sh](#oc_remove_secret_manifestssh)
-  - [anonymization.py](#anonymizationpy)
-- [Output Structure](#output-structure)
-- [Configuration](#configuration)
-- [Security Notes](#security-notes)
+- Collects worker node manifests from the cluster.
+- Enumerates namespaces and lists cluster resources.
+- Collects namespace-level resources and pod logs.
+- Removes common secret and sensitive data patterns from collected files.
+- Exposes a REST API for starting and monitoring collection runs.
+- Deploys on OpenShift through the included Helm chart.
 
----
+## Requirements
 
-## Overview
+- `oc` with a valid login to the target OpenShift cluster.
+- `python3` 3.9 or later.
+- `bash` with standard shell utilities.
+- `helm` for chart installation and upgrades.
+- Access to read namespace and workload objects in the target cluster.
+- Optional: Docker or Podman for building the image from the `Containerfile`.
 
-**kubeoptix-harvester** is a shell + Python toolkit that connects to a live OpenShift cluster and collects a structured snapshot of its resources. After collection, the toolkit scans the artifacts for `Secret` manifests before they are handed off for analysis.
+## Technologies
 
-The entire process runs from a single entry-point script (`run.sh`) and provides an animated, single-line progress bar throughout execution.
-
----
-
-## Prerequisites
-
-| Requirement | Version | Notes |
-|---|---|---|
-| `oc` (OpenShift CLI) | ≥ 4.x | Must be in `$PATH` |
-| `python3` | ≥ 3.9 | Must be in `$PATH` |
-| `bash` | ≥ 4.x | `mapfile` support required |
-| `tput` | any | Used for terminal width detection |
-| Active OC session | — | `oc login` must have been executed |
-
----
+- Bash for cluster collection scripts.
+- Python 3 for sanitization and the FastAPI API.
+- FastAPI and Uvicorn for the HTTP service.
+- OpenShift CLI (`oc`) and Kubernetes resource APIs.
+- Helm for installation and deployment.
+- OpenShift `BuildConfig`, `ImageStream`, and `StatefulSet` resources.
 
 ## Project Structure
 
-```
+```text
 kubeoptix-harvester/
-├── run.sh                              # Main entry point
-├── requirements.txt                    # Python dependencies
-├── .gitignore
+├── Containerfile                   # Runtime image definition
+├── install.sh                      # OpenShift/Helm installation helper
+├── run.sh                          # Local collection wrapper
+├── run-ocp.sh                      # Primary cluster collection entry point
+├── requirements.txt                # Python runtime dependencies
+├── src/
+│   ├── anonymization.py            # Sensitive data masking utility
+│   └── api.py                     # FastAPI service and collection endpoints
 ├── collectors/
-│   ├── oc_collect_worknodes.sh         # Collects worker node YAMLs
-│   ├── oc_collect_all_namespaces.sh    # Iterates over namespaces
-│   ├── oc_collect_namespace.sh         # Collects resources per namespace
-│   └── oc_remove_secret_manifests.sh   # Removes Secret manifests
-└── src/
-    └── anonymization.py               # Sensitive-data masking
+│   ├── oc_collect_all_namespaces.sh
+│   ├── oc_collect_namespace.sh
+│   ├── oc_collect_namespaces.sh
+│   ├── oc_collect_worknodes.sh
+│   └── oc_remove_secret_manifests.sh
+├── helm/
+│   └── kubeoptix-harvester/
+│       ├── Chart.yaml
+│       ├── values.example.yaml
+│       └── templates/
+├── .containerignore
+├── .copilotignore
+├── .helmignore
+├── README.md
+└── .gitignore
 ```
 
----
+## Configuration
 
-## Quick Start
+The application relies on a few environment and Helm settings:
+
+- `API_HOST` and `API_PORT` in the Python process, defaulting to `0.0.0.0:8000`.
+- `LOG_LEVEL`, default `INFO`.
+- `HOME` and `KUBECONFIG` are set in the pod environment, as shown in the Helm values file.
+- `podEnv.TZ` is set to `America/Sao_Paulo` in the example values.
+- `service.api.port` and `targetPort` are configured as `8000`.
+- `persistence.mountPath` is `/app/data`.
+- `build.sourceSecret` can provide a GitHub token when the source repository is private.
+- The chart creates or reuses a namespace via `namespace.create` and `namespace.name`.
+
+The main application endpoints are:
+
+- `GET /health`
+- `POST /collect`
+- `GET /collect/status`
+- `GET /namespaces`
+- `DELETE /assessment`
+- `GET /assessment`
+
+## Installation
+
+Use the included Helm chart to install the workload in OpenShift.
 
 ```bash
-# 1. Authenticate against your OpenShift cluster
-oc login https://<api-url>:6443 -u <user> -p <password>
-
-# 2. Run the full pipeline
-./run.sh --namespaces "my-app-prd another-ns" -o ./artifacts
-
-# Optional: limit pod log lines (default 300)
-./run.sh --namespaces "my-app-prd" --tail-lines 500 -o ./artifacts
+helm upgrade --install kubeoptix-harvester ./helm/kubeoptix-harvester \
+  -n shiftwise-ai \
+  --create-namespace \
+  -f ./helm/kubeoptix-harvester/values.example.yaml
 ```
 
-The script will:
-1. Create and activate a Python virtual environment under `.venv/`
-2. Install Python dependencies from `requirements.txt`
-3. Collect worker node manifests
-4. Collect namespace resources and pod logs
-5. Remove `Secret` manifests (dry-run mode — safe by default)
-6. Finish the collection pipeline
-
----
-
-## OpenShift Helm Installation
-
-Use `install.sh` to run a clean Helm-based installation on OpenShift.
+The repository also includes an install helper:
 
 ```bash
-# Required: pass the values file as argument
-./install.sh -f ./helm/kubeoptix-harvester/values.yaml
-
-# Equivalent positional form
-./install.sh ./helm/kubeoptix-harvester/values.yaml
+./install.sh -f ./helm/kubeoptix-harvester/values.example.yaml
 ```
 
-What `install.sh` does:
-1. Validates required CLIs (`helm`, `oc`) and active cluster session
-2. Optionally removes previous release/namespace when `RESET=true`
-3. Ensures the target namespace exists
-4. Installs/upgrades Helm chart from `./helm/kubeoptix-harvester`
-5. Triggers exactly one OpenShift build (`oc start-build`)
-6. Performs route health check on `/health`
+The helper validates `oc`, `helm`, the target namespace, and then performs the Helm installation and the OpenShift build process.
 
-Useful environment variables:
+## Helm Configuration
 
-| Variable | Default | Description |
-|---|---|---|
-| `RELEASE` | `kubeoptix-harvester` | Helm release name |
-| `NS` | `shiftwise-ai` | Target namespace |
-| `RESET` | `true` | Remove previous release and namespace before install |
-| `WAIT_BUILD` | `true` | Follow build logs until build completes |
-| `BUILD_FROM_LOCAL` | `true` | Uses `oc start-build --from-dir=.` so deployed image matches local workspace changes |
-| `GIT_URI` | `https://github.com/ShiftWise-AI/kubeoptix-harvester.git` | Source repository URL used only when `BUILD_FROM_LOCAL=false` |
-| `GIT_REF` | `feature/ocp` | Git branch/tag used only when `BUILD_FROM_LOCAL=false` |
-| `scalePolicy.enabled` | `true` | Creates an admission policy that denies scaling the StatefulSet above 1 replica |
-| `scalePolicy.maxReplicas` | `1` | Maximum replicas allowed for the harvester StatefulSet |
+The chart name is `kubeoptix-harvester` and is defined in `helm/kubeoptix-harvester/Chart.yaml`.
 
-Examples:
+The main Kubernetes resources created by the chart are:
+
+- `Namespace` when `namespace.create` is enabled.
+- `ImageStream` and `BuildConfig` when `build.enabled` is enabled.
+- `ServiceAccount` and optional `ClusterRoleBinding`.
+- `StatefulSet` for the application workload.
+- `Service` for the API endpoint.
+- `PersistentVolumeClaim` for `/app/data` when persistence is enabled.
+- Optional `Secret` for Git source authentication.
+
+The values file exposes the key deployment settings, including:
+
+- `deploy.enabled`
+- `namespace.create` and `namespace.name`
+- `build.enabled`, `build.source.gitUri`, and `build.source.gitRef`
+- `service.api.name`, `type`, `port`, and `targetPort`
+- `persistence.enabled`, `size`, and `mountPath`
+- `scalePolicy.enabled` and `scalePolicy.maxReplicas`
+
+## Running Locally
+
+The project is primarily designed for OpenShift deployment, but the Python API can be started locally for development if `oc` is authenticated and the Python dependencies are installed.
 
 ```bash
-# Do not delete namespace/release before reinstall
-RESET=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
-
-# Start build without waiting in foreground
-WAIT_BUILD=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
-
-# Force build from remote Git source instead of local workspace
-BUILD_FROM_LOCAL=false ./install.sh -f ./helm/kubeoptix-harvester/values.yaml
+python3 -m pip install -r requirements.txt
+python3 src/api.py
 ```
 
-### Collection progress
+Then check the health endpoint:
 
-After starting a collection with `POST /collect`, query `GET /collect/status`. The JSON response is a numeric value between `0` and `100`, for example:
-
-```json
-50
+```bash
+curl http://localhost:8000/health
 ```
 
-A new collection starts at `0` and advances gradually as namespaces, resource types, and pods are processed. While a collection is running, another `POST /collect` request returns HTTP `409`.
+## Development
 
----
+To prepare the environment:
 
-## Git Token for Private Clone
-
-Because the source repository is private, OpenShift BuildConfig must authenticate to clone it.
-
-Set this in your Helm values file (`build.sourceSecret`):
-
-```yaml
-build:
-  sourceSecret:
-    create: true
-    name: github-auth
-    username: x-access-token
-    token: <YOUR_GITHUB_PAT>
+```bash
+python3 -m pip install -r requirements.txt
 ```
 
-Required token permissions (Fine-grained PAT):
-1. Repository access: only `ShiftWise-AI/kubeoptix-harvester`
-2. Repository permissions: `Contents: Read-only`
-3. If organization SSO/SAML is enabled, authorize the token for the organization
+To run the collection flow directly from the repository:
 
-Notes:
-1. Helm/OpenShift only needs clone (read) access; no write access is required.
-2. Keep `values.yaml` out of version control and rotate tokens if exposed.
-
----
-
-## Extraction & Processing Flow
-
-```mermaid
-flowchart TD
-    A([run.sh]) --> B[Setup Python venv\n& install requirements]
-    B --> C
-
-    subgraph STEP1 ["Step 1 — Worker Nodes"]
-        C[oc_collect_worknodes.sh]
-        C --> C1[List nodes with\nlabel node-role=worker]
-        C1 --> C2[Export YAML per node\nto artifacts/worknodes/]
-    end
-
-    C2 --> D
-
-    subgraph STEP2 ["Step 2 — Namespace Artifacts"]
-        D[oc_collect_all_namespaces.sh]
-        D --> D1[Iterate over each namespace]
-        D1 --> E[oc_collect_namespace.sh]
-
-        subgraph NS ["Per namespace"]
-            E --> E1["Step 1/3 — Additional\nnamespace resources\n(300+ resource kinds)"]
-            E1 --> E2["Step 2/3 — Core manifests\nDeployment · DeploymentConfig\nStatefulSet · ConfigMap\nRoute · Service\nJob · ReplicaSet · HPA"]
-            E2 --> E3["Step 3/3 — Pod logs\ngrouped by app label"]
-        end
-    end
-
-    E3 --> F
-
-    subgraph STEP3 ["Step 3 — Secret Removal"]
-        F[oc_remove_secret_manifests.sh]
-        F --> F1[Scan all .yaml / .yml files]
-        F1 --> F2{kind: Secret?}
-        F2 -- yes --> F3[Delete file]
-        F2 -- no --> F4[Skip]
-    end
-
-    F3 & F4 --> H([Artifacts ready\nfor analysis])
-
-    style STEP1 fill:#1e3a5f,color:#fff
-    style STEP2 fill:#1e3a5f,color:#fff
-    style STEP3 fill:#1e3a5f,color:#fff
-    style H fill:#155724,color:#fff
+```bash
+./run-ocp.sh --namespaces "app-a app-b" --tail-lines 300
 ```
 
----
+This script calls the namespace collectors and writes artifacts to `/app/data/assessment`.
 
-## Scripts Reference
+## Container
 
-### `run.sh`
+The repository includes a `Containerfile` that builds a runtime image for the service.
 
-Main orchestrator. Creates the Python virtual environment, validates all dependencies, and runs the four steps in order.
+Example:
 
-```
-Usage:
-  ./run.sh [--namespaces "ns1 ns2"] [-o <output_dir>] [--tail-lines N]
-
-Options:
-  --namespaces   Space-separated list of namespaces to collect (required)
-  -o             Output directory (fixed at /app/data/assessment)
-  --tail-lines   Number of log lines to tail per pod (default: 300)
+```bash
+docker build -t kubeoptix-harvester -f Containerfile .
 ```
 
-Note: the collector enforces a fixed output root (`/app/data/assessment`). Any custom `-o` value is ignored.
+The image:
 
----
+- installs Python and the OpenShift CLI,
+- copies the source and collector scripts,
+- installs the Python dependencies,
+- exposes port `8000`, and
+- runs the FastAPI service with `python /app/src/api.py`.
 
-### `oc_collect_worknodes.sh`
+## Deployment
 
-Lists all nodes labeled `node-role.kubernetes.io/worker` and exports their full YAML manifest.
+The deployment flow is organized around the Helm chart and the OpenShift build pipeline:
 
-**Output:** `<output_dir>/worknodes/<node-name>.yaml`
+1. The chart creates or reuses the target namespace.
+2. The build resources create an image from the repository and push it to the target `ImageStream`.
+3. The app workload is deployed as a `StatefulSet`.
+4. The API is exposed through the `Service` on port `8000`.
+5. The persistent volume stores assessment artifacts under `/app/data`.
 
----
+## Troubleshooting
 
-### `oc_collect_all_namespaces.sh`
+- If `oc` is not logged in or the CLI is missing, collection and installation commands fail immediately.
+- If the app is started without a valid cluster context, collection jobs cannot read namespace resources.
+- `POST /collect` returns `409` while a collection is already running.
+- Private sources require a valid `build.sourceSecret` token with read access.
 
-Iterates over a list of namespaces and delegates to `oc_collect_namespace.sh` for each one.
+## License
 
----
-
-### `oc_collect_namespace.sh`
-
-Core collection script. Executes three ordered steps per namespace:
-
-| Step | What is collected | Output path |
+No explicit license file is present in this repository, so no license is documented here.
 |---|---|---|
 | 1/3 | Additional namespaced resources (300+ CRD kinds) | `<output_dir>/<namespace>/resources/<kind>/<name>.yaml` |
 | 2/3 | Core manifests (Deployment, Service, Route, etc.) | `<output_dir>/<namespace>/apps/<app>/<kind>/<name>.yaml` |

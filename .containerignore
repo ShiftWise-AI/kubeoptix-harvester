@@ -1,23 +1,23 @@
-# Excluir controle de versão e IDEs
+# Exclude version control and IDE files
 .git/
 .vscode/
 .idea/
 
-# Excluir Helm Charts do contexto do container (se não forem necessários no runtime)
+# Exclude Helm charts from the container context when they are not required at runtime
 charts/
 .helmignore
 
-# Python: ignorar cache e ambientes locais
+# Python: ignore local caches and virtual environments
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
 
-# Documentação pesada e testes que não rodam no container
+# Exclude heavy documentation and tests that do not run in the container
 docs/
 tests/
 *.md
 
-# Excluir o próprio arquivo de ignore
+# Exclude the ignore file itself
 .containerignore
 .podmanignore

@@ -1,6 +1,6 @@
-# Regras Rígidas de Eficiência de Tokens
-- Retorne APENAS código. Sem explicações, a menos que explicitamente solicitado.
-- Use um tom conciso e direto; ignore etiquetas sociais.
-- Priorize modelos leves (como GPT-4o Mini) para tarefas rotineiras.
-- Stack: Python (3.9+), Bash scripts, Podman para containers, OpenShift para orquestração.
-- Evite gerar boilerplate desnecessário ou comentários óbvios.
+# Strict Token Efficiency Rules
+- Return only code. No explanations unless explicitly requested.
+- Use a concise and direct tone; ignore social niceties.
+- Prefer lightweight models for routine tasks.
+- Stack: Python (3.9+), Bash scripts, Podman for containers, OpenShift for orchestration.
+- Avoid generating unnecessary boilerplate or obvious comments.

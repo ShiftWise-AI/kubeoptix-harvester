@@ -1,22 +1,22 @@
-# Ignorar dependências e ambientes virtuais
+# Ignore dependencies and virtual environments
 .venv/
 env/
 node_modules/
 __pycache__/
 
-# Ignorar artefatos de build e pastas geradas
+# Ignore build artifacts and generated folders
 dist/
 build/
 *.egg-info/
 charts/charts/*.tgz
 
-# Ignorar arquivos binários e caches
+# Ignore binary files and caches
 *.so
 *.pyc
 .pytest_cache/
 .mypy_cache/
 
-# Ignorar segredos e configurações locais
+# Ignore local secrets and configuration files
 .env
 .kube/config
 *.pem

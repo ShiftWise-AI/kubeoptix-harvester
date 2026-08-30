@@ -1,4 +1,4 @@
-# Não incluir arquivos de desenvolvimento no pacote Helm
+# Do not include development files in the Helm package
 .git/
 .gitignore
 .containerignore
@@ -7,9 +7,9 @@
 Dockerfile
 Containerfile
 
-# Ignorar scripts de deploy locais
+# Ignore local deploy scripts
 deploy.sh
 *.log
 
-# Ignorar arquivos de teste do Helm se não forem usados
+# Ignore Helm test artifacts when they are not used
 charts/*.tgz

@@ -27,7 +27,7 @@ PROGRESS_PREFIX = "[PROGRESS] "
 
 app = FastAPI(
     title="KubeOptix Harvester API",
-    description="API REST do KubeOptix Harvester.",
+    description="KubeOptix Harvester REST API.",
     version="1.0.0",
 )
 
@@ -109,7 +109,7 @@ def fetch_namespaces() -> dict[str, object]:
     logger.info("Starting namespaces script")
 
     if not os.path.isfile(NAMESPACES_SCRIPT):
-        raise HTTPException(status_code=500, detail="script oc_collect_namespaces.sh nao encontrado")
+        raise HTTPException(status_code=500, detail="script oc_collect_namespaces.sh not found")
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -127,21 +127,22 @@ def fetch_namespaces() -> dict[str, object]:
     output = (result.stdout or "").strip()
     if result.returncode != 0:
         logger.error("Namespaces script failed with exit code: %s", result.returncode)
-        raise HTTPException(status_code=500, detail=output or "falha ao listar namespaces")
+        raise HTTPException(status_code=500, detail=output or "failed to list namespaces")
 
     try:
         payload = json.loads(output)
     except json.JSONDecodeError as exc:
         logger.exception("Namespaces script returned invalid JSON")
-        raise HTTPException(status_code=500, detail="script de namespaces nao retornou JSON valido") from exc
+        raise HTTPException(status_code=500, detail="namespace script did not return valid JSON") from exc
 
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=500, detail="script de namespaces retornou formato invalido")
+        raise HTTPException(status_code=500, detail="namespace script returned an invalid format")
 
     return payload
 
+
 def build_tree(path: Path) -> dict:
-    """Constrói recursivamente uma estrutura semelhante ao comando tree."""
+    """Recursively build a directory tree similar to the Unix tree command."""
     if path.is_file():
         return {
             "name": path.name,
@@ -153,12 +154,11 @@ def build_tree(path: Path) -> dict:
         entries = sorted(
             path.iterdir(),
             key=lambda entry: (
-                not entry.is_dir(),  # diretórios primeiro
+                not entry.is_dir(),
                 entry.name.lower(),
             ),
         )
         for entry in entries:
-            # Ignora arquivos/diretórios ocultos
             if entry.name.startswith("."):
                 continue
             children.append(build_tree(entry))
@@ -174,9 +174,11 @@ def build_tree(path: Path) -> dict:
         "type": "directory",
         "children": children,
     }
+
+
 @app.get("/assessment", response_model=dict, tags=["collector"])
 def assessment_tree():
-    """Retorna a estrutura de diretórios do assessment."""
+    """Return the assessment directory tree."""
     root = Path(ASSESSMENT_DIR)
     if not root.exists():
         raise HTTPException(
@@ -190,6 +192,7 @@ def assessment_tree():
         )
     return build_tree(root)
 
+
 @app.get("/health", tags=["infra"])
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
@@ -199,21 +202,21 @@ def healthcheck() -> dict[str, str]:
 def collect(payload: CollectRequest, background_tasks: BackgroundTasks) -> CollectResponse:
     namespaces = payload.namespaces.strip()
     if not namespaces:
-        raise HTTPException(status_code=400, detail="namespaces nao pode ser vazio")
+        raise HTTPException(status_code=400, detail="namespaces cannot be empty")
 
     if not os.path.isfile(RUN_SCRIPT):
-        raise HTTPException(status_code=500, detail="script run-ocp.sh nao encontrado")
+        raise HTTPException(status_code=500, detail="script run-ocp.sh not found")
 
     with collection_state_lock:
         if collection_state["running"]:
-            raise HTTPException(status_code=409, detail="uma coleta ja esta em execucao")
+            raise HTTPException(status_code=409, detail="a collection is already running")
         collection_state["progress"] = 0
         collection_state["running"] = True
 
     background_tasks.add_task(run_collection, namespaces)
     return CollectResponse(
         status="accepted",
-        message="Coleta iniciada em background",
+        message="Collection started in the background",
     )
 
 
@@ -229,14 +232,14 @@ def list_namespaces() -> NamespacesResponse:
     namespaces = payload.get("namespaces", [])
 
     if not isinstance(namespaces, list):
-        raise HTTPException(status_code=500, detail="campo namespaces invalido no JSON retornado")
+        raise HTTPException(status_code=500, detail="namespaces field is invalid in the returned JSON")
 
     namespace_names: list[str] = []
     for namespace in namespaces:
         if isinstance(namespace, str):
             namespace_names.append(namespace)
         else:
-            raise HTTPException(status_code=500, detail="campo namespaces deve conter apenas strings")
+            raise HTTPException(status_code=500, detail="namespaces field must contain only strings")
 
     return NamespacesResponse(
         status=str(payload.get("status", "ok")),
@@ -250,12 +253,12 @@ def cleanup_assessment_data() -> CleanupResponse:
     if not ASSESSMENT_DIR.exists():
         return CleanupResponse(
             status="ok",
-            message="Diretorio de assessment nao existe; nada para limpar",
+            message="Assessment directory does not exist; nothing to clean",
             deleted_items=0,
         )
 
     if not ASSESSMENT_DIR.is_dir():
-        raise HTTPException(status_code=500, detail="/app/data/assessment nao e um diretorio")
+        raise HTTPException(status_code=500, detail="/app/data/assessment is not a directory")
 
     deleted_items = 0
 
@@ -267,12 +270,12 @@ def cleanup_assessment_data() -> CleanupResponse:
                 child.unlink()
             deleted_items += 1
     except Exception as exc:
-        logger.exception("Erro ao limpar dados de assessment")
-        raise HTTPException(status_code=500, detail=f"falha ao limpar assessment: {exc}") from exc
+        logger.exception("Error while cleaning assessment data")
+        raise HTTPException(status_code=500, detail=f"failed to clean assessment data: {exc}") from exc
 
     return CleanupResponse(
         status="ok",
-        message="Dados de assessment removidos com sucesso",
+        message="Assessment data removed successfully",
         deleted_items=deleted_items,
     )
 

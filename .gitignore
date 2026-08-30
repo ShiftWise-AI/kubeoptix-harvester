@@ -102,6 +102,6 @@ $RECYCLE.BIN/
 *.log
 logs/
 
-# Helm values locais (podem conter credenciais)
+# Local Helm values (may contain credentials)
 helm/kubeoptix-harvester/values.yaml
 helm/kubeoptix-harvester/values.private.yaml
