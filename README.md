@@ -289,6 +289,3 @@ At the end of each run, the script prints an explicit en-US completion message w
 - Always review the output directory before sharing it externally.
 - The `.gitignore` excludes generated artifacts under `data/` (for local runs) and `.bak` backup files.
 
----
-
-*Other language versions: [Português BR](README.pt-br.md) · [Italiano](README.it.md)*
