@@ -61,231 +61,210 @@ kubeoptix-harvester/
 └── .gitignore
 ```
 
-## Configuration
+## Collection Flow
 
-The application relies on a few environment and Helm settings:
+`run-ocp.sh` performs three steps:
 
-- `API_HOST` and `API_PORT` in the Python process, defaulting to `0.0.0.0:8000`.
-- `LOG_LEVEL`, default `INFO`.
-- `HOME` and `KUBECONFIG` are set in the pod environment, as shown in the Helm values file.
-- `podEnv.TZ` is set to `America/Sao_Paulo` in the example values.
-- `service.api.port` and `targetPort` are configured as `8000`.
-- `persistence.mountPath` is `/app/data`.
-- `build.sourceSecret` can provide a GitHub token when the source repository is private.
-- The chart creates or reuses a namespace via `namespace.create` and `namespace.name`.
+1. Collects YAML manifests for nodes labeled `node-role.kubernetes.io/worker`.
+2. Collects the selected namespaces with `oc_collect_all_namespaces.sh`.
+3. Scans YAML files for `kind: Secret` and reports them with the cleanup script in dry-run mode.
 
-The main application endpoints are:
+The cleanup step does not delete files in the normal collection flow. To delete matching Secret manifests, run `oc_remove_secret_manifests.sh` without `--dry-run` after reviewing the output.
 
-- `GET /health`
-- `POST /collect`
-- `GET /collect/status`
-- `GET /namespaces`
-- `DELETE /assessment`
-- `GET /assessment`
+When `--namespaces` is omitted, the collector uses the `default` namespace. Namespace arguments are passed as a space-separated string, for example `"app-a app-b"`.
 
-## Installation
+## Direct Collection
 
-Use the included Helm chart to install the workload in OpenShift.
+Authenticate first and check the active identity:
 
 ```bash
-helm upgrade --install kubeoptix-harvester ./helm/kubeoptix-harvester \
-  -n shiftwise-ai \
-  --create-namespace \
-  -f ./helm/kubeoptix-harvester/values.example.yaml
+oc login https://api.example.com:6443
+oc whoami
 ```
 
-The repository also includes an install helper:
-
-```bash
-./install.sh -f ./helm/kubeoptix-harvester/values.example.yaml
-```
-
-The helper validates `oc`, `helm`, the target namespace, and then performs the Helm installation and the OpenShift build process.
-
-## Helm Configuration
-
-The chart name is `kubeoptix-harvester` and is defined in `helm/kubeoptix-harvester/Chart.yaml`.
-
-The main Kubernetes resources created by the chart are:
-
-- `Namespace` when `namespace.create` is enabled.
-- `ImageStream` and `BuildConfig` when `build.enabled` is enabled.
-- `ServiceAccount` and optional `ClusterRoleBinding`.
-- `StatefulSet` for the application workload.
-- `Service` for the API endpoint.
-- `PersistentVolumeClaim` for `/app/data` when persistence is enabled.
-- Optional `Secret` for Git source authentication.
-
-The values file exposes the key deployment settings, including:
-
-- `deploy.enabled`
-- `namespace.create` and `namespace.name`
-- `build.enabled`, `build.source.gitUri`, and `build.source.gitRef`
-- `service.api.name`, `type`, `port`, and `targetPort`
-- `persistence.enabled`, `size`, and `mountPath`
-- `scalePolicy.enabled` and `scalePolicy.maxReplicas`
-
-## Running Locally
-
-The project is primarily designed for OpenShift deployment, but the Python API can be started locally for development if `oc` is authenticated and the Python dependencies are installed.
-
-```bash
-python3 -m pip install -r requirements.txt
-python3 src/api.py
-```
-
-Then check the health endpoint:
-
-```bash
-curl http://localhost:8000/health
-```
-
-## Development
-
-To prepare the environment:
-
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-To run the collection flow directly from the repository:
+Run a collection from the repository checkout:
 
 ```bash
 ./run-ocp.sh --namespaces "app-a app-b" --tail-lines 300
 ```
 
-This script calls the namespace collectors and writes artifacts to `/app/data/assessment`.
+The output root is always `/app/data/assessment`. The `-o`/`--output-dir` option is accepted by the lower-level collectors for composition, but `run-ocp.sh` normalizes the final output path to `/app/data/assessment`.
 
-## Container
-
-The repository includes a `Containerfile` that builds a runtime image for the service.
-
-Example:
+Individual collectors can be used when needed:
 
 ```bash
-docker build -t kubeoptix-harvester -f Containerfile .
+./collectors/oc_collect_worknodes.sh -o ./output
+./collectors/oc_collect_namespace.sh -n app-a -o ./output --tail-lines 100
+./collectors/oc_collect_namespaces.sh
+./collectors/oc_remove_secret_manifests.sh -d ./output --dry-run
 ```
-
-The image:
-
-- installs Python and the OpenShift CLI,
-- copies the source and collector scripts,
-- installs the Python dependencies,
-- exposes port `8000`, and
-- runs the FastAPI service with `python /app/src/api.py`.
-
-## Deployment
-
-The deployment flow is organized around the Helm chart and the OpenShift build pipeline:
-
-1. The chart creates or reuses the target namespace.
-2. The build resources create an image from the repository and push it to the target `ImageStream`.
-3. The app workload is deployed as a `StatefulSet`.
-4. The API is exposed through the `Service` on port `8000`.
-5. The persistent volume stores assessment artifacts under `/app/data`.
-
-## Troubleshooting
-
-- If `oc` is not logged in or the CLI is missing, collection and installation commands fail immediately.
-- If the app is started without a valid cluster context, collection jobs cannot read namespace resources.
-- `POST /collect` returns `409` while a collection is already running.
-- Private sources require a valid `build.sourceSecret` token with read access.
-
-## License
-
-No explicit license file is present in this repository, so no license is documented here.
-|---|---|---|
-| 1/3 | Additional namespaced resources (300+ CRD kinds) | `<output_dir>/<namespace>/resources/<kind>/<name>.yaml` |
-| 2/3 | Core manifests (Deployment, Service, Route, etc.) | `<output_dir>/<namespace>/apps/<app>/<kind>/<name>.yaml` |
-| 3/3 | Pod logs (grouped by `app` label) | `<output_dir>/<namespace>/apps/<app>/pod-logs/<pod>.log` |
-
-Resources without an `app` label are stored under `__no_app__`.
-
----
-
-### `oc_remove_secret_manifests.sh`
-
-Recursively scans the artifact directory for YAML files containing `kind: Secret` and deletes them.
-
-> **Default mode is `--dry-run`** (called from `run.sh`). To actually delete, remove the flag.
-
-```
-Usage:
-  ./collectors/oc_remove_secret_manifests.sh -d <directory> [--dry-run]
-```
-
----
-
-### `anonymization.py`
-
-The script is retained in the repository for now, but is not executed by the collection pipelines.
-
-When run manually, it walks the entire artifact directory and masks sensitive data patterns using regex substitution.
-
-| Pattern key | What it matches |
-|---|---|
-| `CPF` | Brazilian CPF numbers |
-| `EMAIL` | Email addresses |
-| `TOKEN` / `TOKEN_EXPLICITO` | Bearer tokens, JWT, service account tokens |
-| `CHAVE_API` | API key / secret fields |
-| `CERTIFICADO_PEM` | PEM certificates |
-| `CHAVE_PRIVADA_PEM` | PEM private keys |
-| `SEGREDO_INFRA` | password, secret, dockerconfigjson, etc. |
-| `IBAN` / `SWIFT_BIC` | International banking identifiers |
-
-Matches are replaced with `[<TYPE>_REMOVIDO]`.
-
-```
-Usage:
-  python3 src/anonymization.py <directory> [--backup]
-```
-
----
 
 ## Output Structure
 
-After a full run, the artifact directory looks like:
+The resulting directory has this general shape:
 
-```
+```text
 /app/data/assessment/
 ├── worknodes/
 │   ├── worker-node-01.yaml
 │   └── worker-node-02.yaml
 └── <namespace>/
     ├── apps/
-    │   ├── <app-name>/
+    │   ├── <app-label>/
     │   │   ├── deployments/
+    │   │   ├── deploymentconfigs/
+    │   │   ├── statefulsets/
     │   │   ├── configmaps/
-    │   │   ├── services/
     │   │   ├── routes/
+    │   │   ├── services/
+    │   │   ├── jobs/
+    │   │   ├── replicasets/
     │   │   └── pod-logs/
     │   └── __no_app__/
     └── resources/
-        ├── persistentvolumeclaims/
-        ├── serviceaccounts/
-        └── ...
+        └── <resource-kind>/<resource-name>.yaml
 ```
 
----
+Application resources are grouped using the `app` label. Objects without that label are stored under `apps/__no_app__`. Pod logs contain up to `--tail-lines` lines per pod, with a default of `300`.
 
-## Configuration
+## REST API
 
-| Variable | Default | Description |
+The service listens on `0.0.0.0:8000` by default. The current implementation reads `LOG_LEVEL` and does not define separate `API_HOST` or `API_PORT` settings.
+
+### Health
+
+```bash
+curl http://localhost:8000/health
+```
+
+Response: `{"status":"ok"}`
+
+### List namespaces
+
+```bash
+curl http://localhost:8000/namespaces
+```
+
+The response contains `status`, `count`, and a string array named `namespaces`.
+
+### Start a collection
+
+```bash
+curl -X POST http://localhost:8000/collect \
+  -H 'Content-Type: application/json' \
+  -d '{"namespaces":"app-a app-b"}'
+```
+
+The job runs in the background and returns:
+
+```json
+{
+  "status": "accepted",
+  "message": "Collection started in the background"
+}
+```
+
+An empty namespace string returns `400`. Only one collection can run at a time; a second request returns `409`.
+
+### Read progress
+
+```bash
+curl http://localhost:8000/collect/status
+```
+
+The response is a JSON integer from `0` to `100`. Progress is process-local and is reset when the API process restarts; it is not persisted.
+
+### Inspect and delete collected files
+
+```bash
+curl http://localhost:8000/assessment
+curl -X DELETE http://localhost:8000/assessment
+```
+
+`GET /assessment` returns a recursive JSON tree rooted at `/app/data/assessment` and returns `404` before that directory exists. `DELETE /assessment` removes every direct child of the directory, including namespace and `worknodes` directories.
+
+## Local Development
+
+Install dependencies and start the API:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 src/api.py
+```
+
+The health endpoint works from a repository checkout. Collection endpoints invoke absolute paths (`/app/run-ocp.sh` and `/app/collectors/...`), so collection through the API requires the container layout or equivalent files mounted at `/app`. For a checkout, use `run-ocp.sh` directly or run the API from an image built with the `Containerfile`.
+
+## Sanitization and Data Handling
+
+Secret manifest removal and value anonymization are separate operations:
+
+- `oc_remove_secret_manifests.sh` detects YAML files whose `kind` line is `Secret`. It reports matches in dry-run mode and deletes them only without `--dry-run`.
+- `src/anonymization.py` is not called automatically by `run-ocp.sh` or the API. Run it manually against a copied or reviewed directory:
+
+```bash
+python3 src/anonymization.py /app/data/assessment --backup
+```
+
+The anonymizer applies regular expressions for identifiers and contact data, tokens and API keys, certificates and private keys, and common infrastructure or banking fields. `--backup` creates a `.bak` file before each modified file. Regex-based masking is not a guarantee that all sensitive data has been removed.
+
+## OpenShift Deployment
+
+The example values file is configured for a `shiftwise-ai` namespace, a `10Gi` PVC, a `ClusterIP` service on port `8000`, and a service account with the `cluster-reader` cluster role.
+
+### Helm only
+
+```bash
+helm upgrade --install kubeoptix-harvester ./helm/kubeoptix-harvester \
+  -n shiftwise-ai --create-namespace \
+  -f ./helm/kubeoptix-harvester/values.example.yaml
+```
+
+The chart can create the namespace, `ImageStream`, `BuildConfig`, service account, optional `ClusterRoleBinding`, `StatefulSet`, `Service`, and PVC. Set `build.sourceSecret.create=true` and provide the Git username/token when the source repository is private.
+
+### Installation helper
+
+`install.sh` requires a values file, validates `oc` and Helm, creates the target namespace when needed, installs the build resources, starts and waits for an OpenShift build, deploys the workload, waits for the StatefulSet rollout, and performs cleanup of completed builds, completed pods, unused release ConfigMaps, and unused release Secrets.
+
+```bash
+./install.sh -f ./helm/kubeoptix-harvester/values.example.yaml
+./install.sh -f values.yaml --skip-cleanup
+./install.sh -f values.yaml --cleanup-dry-run
+BUILD_FROM_LOCAL=true ./install.sh -f values.yaml
+```
+
+Useful environment variables are `RELEASE`, `NS`, `CHART_PATH`, `WAIT_TIMEOUT`, `BUILD_FROM_LOCAL`, `POST_INSTALL_CLEANUP`, and `CLEANUP_DRY_RUN`. With `BUILD_FROM_LOCAL=true`, the helper starts the BuildConfig with `--from-dir=.`; otherwise it uses `build.source.gitUri` and `build.source.gitRef`.
+
+## Configuration Reference
+
+| Setting | Example default | Purpose |
 |---|---|---|
-| `NAMESPACES` | `default ` | Namespaces collected when `--namespaces` is omitted |
-| `TAIL_LINES` | `300` | Log lines per pod |
-| `OUTPUT_DIR` | `/app/data/assessment` | Artifact root directory (namespaces under `/app/data/assessment/<namespace>`) |
-| `VENV_DIR` | `./.venv` | Python virtual environment path |
+| `namespace.name` | `shiftwise-ai` | OpenShift project/namespace |
+| `build.enabled` | `true` | Creates the ImageStream and BuildConfig |
+| `build.source.gitUri` | Repository URL | Git source for the build |
+| `build.source.gitRef` | `feature/ocp` | Git branch or ref |
+| `service.api.port` | `8000` | Service port |
+| `persistence.size` | `10Gi` | PVC capacity |
+| `persistence.mountPath` | `/app/data` | Application data mount |
+| `scalePolicy.maxReplicas` | `1` | Maximum replicas configured by the chart policy |
+| `podEnv.HOME` | `/tmp` | Writable home directory in the container |
+| `podEnv.KUBECONFIG` | `/tmp/.kube/config` | Kubeconfig path used by CLI tooling |
+| `LOG_LEVEL` | `INFO` | Python logging level |
+| `--tail-lines` | `300` | Maximum pod log lines per pod |
 
-The collector runs as a single pod only (StatefulSet replicas fixed at 1, no autoscaler configured).
-At the end of each run, the script prints an explicit en-US completion message with the final artifacts directory.
+The service-account token is used by the example startup script to run `oc login` against the in-cluster Kubernetes API. Review the granted RBAC permissions before deploying to a production cluster.
 
----
+## Troubleshooting
 
-## Security Notes
+- `oc whoami` fails: authenticate to the intended cluster and verify the current context.
+- Permission errors during collection: grant the service account read access to the required resources and logs; worker-node collection additionally requires node read access.
+- `POST /collect` returns `409`: another collection is running; poll `/collect/status` until it finishes.
+- `GET /assessment` returns `404`: no collection has created `/app/data/assessment` yet.
+- The API reports `run-ocp.sh not found`: the service is running outside the expected `/app` image layout; use the container image or run the wrapper directly from the checkout.
+- Use `run-ocp.sh` for direct collection. `run.sh` is a legacy wrapper and currently references `VENV_DIR` while its declaration is disabled.
+- A private Git build fails: configure `build.sourceSecret` with credentials that can read the repository, or use `BUILD_FROM_LOCAL=true` from the workspace.
+- The PVC cannot mount: verify the storage class and that the configured access mode is supported by the cluster.
 
-- Secret manifests are **removed** (or reported in dry-run) before sharing artifacts.
-- `anonymization.py` is not executed automatically; review and sanitize artifacts before sharing them externally.
-- Always review the output directory before sharing it externally.
-- The `.gitignore` excludes generated artifacts under `data/` (for local runs) and `.bak` backup files.
+## License
+
+No explicit license file is present in this repository, so no license is documented here.
 
