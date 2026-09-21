@@ -7,19 +7,19 @@ namespace:
 
 image:
   useBuildOutput: true
-  repository: default-route-openshift-image-registry.apps-crc.testing/shiftwise-ai/kubeoptix-harvester
-  tag: latest
+  repository: quay.io/parraes/kubeoptix-harvester
+  tag: 1.0.0
   pullPolicy: Always
 
 build:
   enabled: true
   registryHost: image-registry.openshift-image-registry.svc:5000
   imageStreamName: kubeoptix-harvester
-  outputTag: latest
+  outputTag: 1.0.0
   containerfilePath: Containerfile
   source:
     gitUri: https://github.com/ShiftWise-AI/kubeoptix-harvester.git
-    gitRef: feature/ocp
+    gitRef: main
     contextDir: ""
   sourceSecret:
     create: true
