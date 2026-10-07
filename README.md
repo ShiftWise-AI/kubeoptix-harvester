@@ -1,5 +1,7 @@
 # KubeOptix Harvester
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch workflow and contribution process.
+
 KubeOptix Harvester is a small OpenShift collection and sanitization toolkit. It connects to a live cluster, inventories namespaces and workloads, exports manifests and pod logs, and writes the results under `/app/data/assessment` for downstream analysis. The project also scans collected files for common secret patterns so sensitive values can be removed before the data is shared or stored outside the cluster.
 
 The main runtime is a FastAPI service that exposes endpoints to trigger a collection job, check progress, list namespaces, and inspect the generated artifacts. The Helm chart packages the application for deployment on OpenShift and wires it to a StatefulSet, Service, PVC, and build pipeline.
