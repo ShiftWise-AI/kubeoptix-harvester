@@ -266,5 +266,5 @@ The service-account token is used by the example startup script to run `oc login
 
 ## License
 
-No explicit license file is present in this repository, so no license is documented here.
+This project is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the full license text.
 
