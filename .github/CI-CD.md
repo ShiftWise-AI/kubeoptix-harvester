@@ -57,3 +57,30 @@ were committed, pushed, or executed remotely, and no image was published.
 Acceptance requires a failing PR to stay blocked, a reviewed green promotion
 to main, and Quay receiving the exact scanned main image. Behavioral unit tests
 are still a repository coverage gap, not silently claimed as existing coverage.
+
+## PR Failure Remediation (2026-10-09)
+
+PR #17 was blocked by the official OpenShift client binaries. The image now
+builds oc from pinned release-4.22 commit d0f23b14fbf35493e5b713e25ecf662ec239e76c
+with Go 1.27.2 and patched client dependencies. The same binary is exposed as
+oc and kubectl, matching the original archive's client behavior. Two Docker
+archive function signatures are patched for go-archive 0.3 compatibility; the
+patch is versioned under .github/patches and the old vulnerable archive library
+is not reintroduced. Both client version commands executed successfully. The
+custom build currently reports an unknown/unexpanded client version stamp;
+it is not represented as an official Red Hat release binary.
+
+The image gate consumes .github/security/harvester.openvex.json. Four statements
+apply only to the exact Docker/Distribution module PURLs and server-side CVEs:
+Docker daemon archive upload/mount handling, registry pull-through proxy, and
+registry storage deletion with Redis caching. The Containerfile fails if Docker
+daemon, registry handlers/proxy, registry/storage itself, or Redis cache code
+enters the oc dependency graph. Independent memory cache helpers required by
+the client are allowed. The declarations are not blanket CVE ignores and must
+be revisited if source, module versions, linked packages, or runtime usage change.
+
+The two pip/virtualenv historical build inventories are excluded from runtime
+scanning as documented for Analyzer, without removing inventories or excluding
+installed code. The corrected client-only image passed the strict scan with
+VEX; configuration checks also passed. Authenticated collection against a live
+cluster was not exercised. Remote CI and independent review remain required.
