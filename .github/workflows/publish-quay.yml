@@ -2,9 +2,14 @@ name: Publish image to Quay
 
 on:
   pull_request:
+    branches: [main, stage, develop]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  merge_group:
   push:
     branches:
       - main
+      - stage
+      - develop
     tags:
       - 'v*.*.*'
 
@@ -13,16 +18,61 @@ permissions:
 
 concurrency:
   group: quay-${{ github.repository }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  branch-flow:
+    uses: ./.github/workflows/branch-limits.yml
+
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: python -m compileall -q src collectors
+      - run: bash -n run.sh run-ocp.sh install.sh
+
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate workflow syntax
+        run: |
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/actionlint.tar.gz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --status
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= .github/workflows/*.yml
+      - name: Scan dependencies and secrets
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          version: v0.69.3
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+          skip-dirs: .git,.venv,target,node_modules,.cache
+
   publish:
-    runs-on: ubuntu-latest
+    needs: [branch-flow, test, security]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate release tag
         id: release
@@ -40,22 +90,78 @@ jobs:
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Build image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: ./Containerfile
+          push: false
+          load: true
+          tags: |
+            quay.io/parraes/kubeoptix-harvester:${{ steps.release.outputs.version || (github.ref == 'refs/heads/main' && 'latest' || 'pr-check') }}
+            quay.io/parraes/kubeoptix-harvester:sha-${{ github.sha }}
+
+      - name: Require a non-root runtime
+        env:
+          IMAGE: quay.io/parraes/kubeoptix-harvester:sha-${{ github.sha }}
+        run: |
+          user="$(docker image inspect "$IMAGE" --format '{{.Config.User}}')"
+          if [[ -z "$user" || "${user%%:*}" == '0' || "${user%%:*}" == 'root' ]]; then
+            echo '::error::The runtime image must declare a non-root USER.'
+            exit 1
+          fi
+
+      - name: Scan the built image and runtime configuration
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        env:
+          TRIVY_IMAGE_CONFIG_SCANNERS: misconfig,secret
+          TRIVY_VEX: .github/security/harvester.openvex.json
+        with:
+          version: v0.69.3
+          image-ref: quay.io/parraes/kubeoptix-harvester:sha-${{ github.sha }}
+          skip-files: '**/pip/_vendor/bom.cdx.json,**/virtualenv-*.dist-info/sboms/virtualenv.cdx.json'
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+
+      - name: Check publishing credentials
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+        run: |
+          if [[ -z "$QUAY_USERNAME" || -z "$QUAY_PASSWORD" ]]; then
+            echo '::error::Configure QUAY_USERNAME and QUAY_PASSWORD for this repository.'
+            exit 1
+          fi
 
       - name: Log in to Quay
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-        uses: docker/login-action@v3
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
-      - name: Build image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Containerfile
-          push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
-          tags: |
-            quay.io/parraes/kubeoptix-harvester:${{ steps.release.outputs.version || (github.ref == 'refs/heads/main' && 'latest' || 'pr-check') }}
-            quay.io/parraes/kubeoptix-harvester:sha-${{ github.sha }}
+      - name: Publish only the scanned image
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        env:
+          IMAGE: quay.io/parraes/kubeoptix-harvester
+          IMAGE_TAG: ${{ steps.release.outputs.version || 'latest' }}
+        run: |
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:$IMAGE_TAG"
+
+  ci-required:
+    if: always()
+    needs: [branch-flow, test, security, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every mandatory job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
