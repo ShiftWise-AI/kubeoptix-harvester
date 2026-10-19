@@ -1,0 +1,13 @@
+diff --git a/archive_deprecated.go b/archive_deprecated.go
+--- a/archive_deprecated.go
++++ b/archive_deprecated.go
+@@ -103,3 +103,3 @@
+-func DetectCompression(source []byte) archive.Compression {
++func DetectCompression(source []byte) Compression {
+ 	return compression.Detect(source)
+ }
+@@ -159,3 +159,3 @@
+-func Tar(path string, compression archive.Compression) (io.ReadCloser, error) {
++func Tar(path string, compression Compression) (io.ReadCloser, error) {
+ 	return archive.TarWithOptions(path, &archive.TarOptions{Compression: compression})
+ }

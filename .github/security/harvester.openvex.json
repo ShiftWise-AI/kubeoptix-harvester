@@ -1,0 +1,37 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/ShiftWise-AI/kubeoptix-harvester/blob/feature/ci-cd-security/.github/security/harvester.openvex.json",
+  "author": "ShiftWise-AI/kubeoptix-harvester CI",
+  "timestamp": "2026-10-09T20:12:48Z",
+  "version": 2,
+  "statements": [
+    {
+      "vulnerability": {"name": "CVE-2026-41567"},
+      "products": [{"@id": "pkg:golang/github.com/docker/docker@v28.5.2%2Bincompatible"}],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "This finding affects Docker daemon archive-upload handlers, not the client libraries in oc/kubectl. The Containerfile fails if docker/daemon or cmd/dockerd enters the oc dependency graph. The runtime contains only clients, no Docker daemon or server-side PUT /containers/{id}/archive handler."
+    },
+    {
+      "vulnerability": {"name": "CVE-2026-42306"},
+      "products": [{"@id": "pkg:golang/github.com/docker/docker@v28.5.2%2Bincompatible"}],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "This finding affects Docker daemon bind-mount setup during docker cp. The Containerfile fails if docker/daemon or cmd/dockerd enters the oc dependency graph. The runtime contains only oc/kubectl clients and does not mount containers or run the vulnerable Docker daemon."
+    },
+    {
+      "vulnerability": {"name": "CVE-2026-33540"},
+      "products": [{"@id": "pkg:golang/github.com/distribution/distribution/v3@v3.0.0-20230519140516-983358f8e250"}],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The affected Distribution pull-through cache proxy is server-side code. The Containerfile fails if registry/proxy, registry/handlers, the registry/storage package itself, or registry/storage/cache/redis enters the oc dependency graph. The client imports only the independent cache interface and memory cache, not a pull-through registry proxy."
+    },
+    {
+      "vulnerability": {"name": "CVE-2026-35172"},
+      "products": [{"@id": "pkg:golang/github.com/distribution/distribution/v3@v3.0.0-20230519140516-983358f8e250"}],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The affected code is the registry server storage/deletion path with Redis blobdescriptor caching. The Containerfile fails if the registry/storage package itself, registry/handlers, registry/proxy, or registry/storage/cache/redis enters the oc dependency graph. Independent client-side cache/memory helpers are allowed; no registry server, Redis blobdescriptor cache, or storage deletion handler is linked."
+    }
+  ]
+}
