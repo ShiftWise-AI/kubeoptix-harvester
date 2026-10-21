@@ -233,6 +233,21 @@ jobs:
         with:
           go-version-file: operator/go.mod
           cache-dependency-path: operator/go.sum
+      - name: Retry Operator Go module download
+        if: steps.published.outputs.current == 'true'
+        working-directory: operator
+        run: |
+          for attempt in 1 2 3; do
+            if go mod download; then
+              exit 0
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::Unable to download Operator Go modules after 3 attempts"
+              exit 1
+            fi
+            echo "::warning::Go module download failed; retrying (attempt $((attempt + 1))/3)"
+            sleep "$((attempt * 5))"
+          done
       - name: Open or resume validated Operator PR
         if: steps.published.outputs.current == 'true'
         env:

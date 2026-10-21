@@ -107,6 +107,11 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("needs: [ci-required]", workflow)
         self.assertIn("secrets.OPERATOR_TOKEN", workflow)
         self.assertNotIn("pull_request_target:", workflow)
+        download_step = workflow.index("name: Retry Operator Go module download")
+        operator_pr_step = workflow.index("name: Open or resume validated Operator PR")
+        self.assertLess(download_step, operator_pr_step)
+        self.assertIn("for attempt in 1 2 3; do", workflow)
+        self.assertIn("if go mod download; then", workflow)
 
 
 if __name__ == "__main__":
