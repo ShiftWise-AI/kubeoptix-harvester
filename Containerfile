@@ -1,7 +1,7 @@
 FROM registry.access.redhat.com/ubi9/go-toolset:1.25 AS openshift-client-build
 
 ENV CGO_ENABLED=0 \
-    GOTOOLCHAIN=go1.27.2
+    GOTOOLCHAIN=go1.27.3
 
 WORKDIR /opt/app-root/src
 
@@ -72,7 +72,7 @@ COPY src/*.py $SRC_DIR/
 COPY collectors/*.sh $COLLECTOR_DIR/
 
 RUN python3 -m venv $VENV_DIR \
-    && $VENV_DIR/bin/pip install --upgrade pip \
+    && $VENV_DIR/bin/pip install --no-cache-dir --upgrade pip \
     && $VENV_DIR/bin/pip install --no-cache-dir -r requirements.txt 
 
 EXPOSE 8000
