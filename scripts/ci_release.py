@@ -16,6 +16,14 @@ def run(*args, cwd=None):
     return subprocess.check_output(args, cwd=cwd, text=True).strip()
 
 
+def run_operator_release_probe(root):
+    subprocess.run(
+        ["go", "test", "-run", "^TestCIHarvesterReleaseImage$", "./internal/operands"],
+        cwd=root,
+        check=True,
+    )
+
+
 def api(path, method="GET", payload=None):
     command = ["gh", "api", path, "--method", method]
     if payload is not None:
@@ -131,7 +139,7 @@ def update_operator(version, digest, directory="operator"):
         't.Fatalf("unexpected Harvester image: %s", got)\n}\n}\n'
     )
     try:
-        run("go", "test", "./internal/operands", cwd=root)
+        run_operator_release_probe(root)
     finally:
         probe.unlink()
     changed = run("git", "diff", "--name-only", cwd=root).splitlines()

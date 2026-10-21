@@ -52,6 +52,18 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             release.operator_image("unexpected contract", reference)
 
+    def test_operator_release_probe_runs_only_the_generated_test(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(release.subprocess, "run") as command:
+                release.run_operator_release_probe(root)
+
+        command.assert_called_once_with(
+            ["go", "test", "-run", "^TestCIHarvesterReleaseImage$", "./internal/operands"],
+            cwd=root,
+            check=True,
+        )
+
     def test_release_reservation_retries_from_a_fresh_checkout(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as directory:
