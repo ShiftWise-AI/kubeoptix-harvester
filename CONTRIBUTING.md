@@ -10,7 +10,9 @@ This repository is one component of the KubeOptix platform.
 
 ## Validation and releases
 
-Run the checks documented in the component README manually. Image builds, publication, and deployment are maintainer-managed manual operations.
+Pull requests run branch governance, Python and shell validation, Semgrep, Trivy, and a non-root container build. `main` and `develop` require `check-flow`, `ci-required`, and one approval including CODEOWNER review and approval of the latest push. Merges to `main` run the same required checks before the protected `quay-release` job reserves a SemVer tag, publishes the scanned image, and opens a separate Operator PR pinned by digest. The workflow does not deploy to OpenShift or merge the Operator PR.
+
+Release retries must reuse the original full merge commit SHA through `workflow_dispatch`; do not delete or move version tags. The `quay-release` environment requires a reviewer and contains `OPERATOR_TOKEN`. `QUAY_USERNAME` and `QUAY_PASSWORD` are organization secrets and must be available to this repository.
 
 ## Commands
 
