@@ -1,0 +1,31 @@
+name: PR governance
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-flow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea9
+        with:
+          script: |
+            const {data: pr} = await github.rest.pulls.get({
+              ...context.repo, pull_number: context.issue.number
+            });
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            const local = pr.base.repo.full_name === repository &&
+              pr.head.repo?.id === pr.base.repo.id;
+            const base = pr.base.ref;
+            const head = pr.head.ref;
+            const allowed = local && (
+              (base === 'develop' && /^(feature|fix)\/\S+$/.test(head)) ||
+              (base === 'main' && (head === 'develop' || /^fix\/\S+$/.test(head)))
+            );
+            if (!allowed) core.setFailed('Invalid PR repository/source/target. Only local feature/* or fix/* -> develop; develop or fix/* -> main.');
